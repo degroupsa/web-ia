@@ -1,254 +1,144 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import cerebro  # Importamos tu archivo de lógica
+import cerebro
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="DevMaster AI", 
-    layout="wide", 
-    page_icon="🔥",
-    initial_sidebar_state="expanded"
-)
+# --- 1. CONFIGURACIÓN ---
+st.set_page_config(page_title="DevMaster AI", layout="wide", page_icon="🔥")
 
-# --- 2. CONEXIÓN A FIREBASE (HÍBRIDA Y ROBUSTA) ---
-# Intentamos conectar. Si ya está conectado, no hace nada.
+# --- 2. CONEXIÓN A FIREBASE ---
 if not firebase_admin._apps:
     try:
-        # INTENTO A: Conexión NUBE (Streamlit Cloud usando Secrets)
         if "firebase" in st.secrets:
-            # Convertimos el objeto de secretos a un diccionario normal
             key_dict = dict(st.secrets["firebase"])
-            # Arreglamos el bug de los saltos de línea en la clave privada
             key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
-            
             cred = credentials.Certificate(key_dict)
             firebase_admin.initialize_app(cred)
-        
-        # INTENTO B: Conexión LOCAL (Tu PC usando el archivo json)
         else:
             cred = credentials.Certificate("firebase_key.json")
             firebase_admin.initialize_app(cred)
-            
     except Exception as e:
-        st.error(f"❌ Error crítico de base de datos: {e}")
+        st.error(f"Error Database: {e}")
         st.stop()
 
-# Cliente de Base de Datos
 db = firestore.client()
 
-# --- 3. FUNCIONES DE BASE DE DATOS ---
+# --- 3. FUNCIONES DB ---
 def crear_usuario(user, pwd):
-    doc_ref = db.collection("users").document(user)
-    if doc_ref.get().exists:
-        return False
-    
-    doc_ref.set({
-        "password": pwd,
-        "plan": "Gratis",
-        "fecha_registro": firestore.SERVER_TIMESTAMP
+    doc = db.collection("users").document(user).get()
+    if doc.exists: return False
+    db.collection("users").document(user).set({
+        "password": pwd, "plan": "Gratis", "fecha": firestore.SERVER_TIMESTAMP
     })
     return True
 
 def login(user, pwd):
-    doc_ref = db.collection("users").document(user)
-    doc = doc_ref.get()
-    if doc.exists:
-        datos = doc.to_dict()
-        if datos["password"] == pwd:
-            return datos
+    doc = db.collection("users").document(user).get()
+    if doc.exists and doc.to_dict()["password"] == pwd:
+        return doc.to_dict()
     return None
 
-def guardar_mensaje_historial(user, role, content):
-    # Guardamos en la subcolección 'chats' del usuario
+def guardar_historial(user, role, content):
     db.collection("users").document(user).collection("chats").add({
-        "role": role,
-        "content": content,
-        "fecha": firestore.SERVER_TIMESTAMP
+        "role": role, "content": content, "fecha": firestore.SERVER_TIMESTAMP
     })
 
 def cargar_historial(user):
-    # Traemos los mensajes ordenados por fecha
-    chats_ref = db.collection("users").document(user).collection("chats")
-    docs = chats_ref.order_by("fecha").stream()
-    return [doc.to_dict() for doc in docs]
+    ref = db.collection("users").document(user).collection("chats")
+    return [d.to_dict() for d in ref.order_by("fecha").stream()]
 
-# --- 4. INTERFAZ: BARRA LATERAL (SIDEBAR) ---
+# --- 4. INTERFAZ ---
 st.sidebar.title("🔥 DevMaster AI")
+if "usuario" not in st.session_state: st.session_state.usuario = None
 
-if "usuario" not in st.session_state:
-    st.session_state.usuario = None
+menu = st.sidebar.radio("Navegación", ["Login", "Plataforma AI"] if not st.session_state.usuario else ["Plataforma AI", "Mi Cuenta"])
 
-# Menú de navegación dinámico
-opciones_menu = ["Login / Registro"]
-if st.session_state.usuario:
-    opciones_menu = ["Plataforma AI", "Generador Prompts", "Mi Cuenta"]
-
-menu = st.sidebar.radio("Navegación", opciones_menu)
-
-# Mostrar estado del usuario abajo a la izquierda
-if st.session_state.usuario:
-    st.sidebar.divider()
-    st.sidebar.caption(f"👤 Conectado como: {st.session_state.usuario}")
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.usuario = None
-        st.rerun()
-
-# ==========================================
-# 🔐 MÓDULO: LOGIN / REGISTRO
-# ==========================================
-if menu == "Login / Registro":
-    st.header("Acceso a la Plataforma")
-    tab1, tab2 = st.tabs(["Ingresar", "Crear Cuenta"])
-    
+# LOGIN
+if menu == "Login":
+    st.header("Bienvenido")
+    tab1, tab2 = st.tabs(["Entrar", "Registrarse"])
     with tab1:
         u = st.text_input("Usuario")
         p = st.text_input("Contraseña", type="password")
         if st.button("Entrar"):
-            data = login(u, p)
-            if data:
+            if login(u, p):
                 st.session_state.usuario = u
-                st.session_state.plan = data["plan"]
-                st.success("¡Bienvenido!")
-                st.rerun() # Recarga la página para mostrar el menú nuevo
-            else:
-                st.error("Datos incorrectos")
-                
+                st.rerun()
+            else: st.error("Error")
     with tab2:
-        nu = st.text_input("Nuevo Usuario")
-        np = st.text_input("Nueva Contraseña", type="password")
-        if st.button("Registrarse"):
-            if crear_usuario(nu, np):
-                st.success("Cuenta creada. Ahora inicia sesión.")
-            else:
-                st.error("El usuario ya existe.")
+        nu = st.text_input("Nuevo User")
+        np = st.text_input("Nueva Pass", type="password")
+        if st.button("Crear"):
+            if crear_usuario(nu, np): st.success("Creado!")
+            else: st.error("Ya existe")
 
-# ==========================================
-# 🤖 MÓDULO: PLATAFORMA AI (EL NÚCLEO)
-# ==========================================
+# PLATAFORMA
 elif menu == "Plataforma AI":
-    # --- HEADER: BUSCADOR DE TAREAS ---
-    st.subheader(f"Hola, {st.session_state.usuario}. ¿Qué vamos a crear hoy?")
+    st.subheader(f"Hola, {st.session_state.usuario}")
     
-    # Traemos las tareas desde cerebro.py
-    tareas_disponibles = cerebro.obtener_tareas()
-    lista_tareas = list(tareas_disponibles.keys())
+    tareas = cerebro.obtener_tareas()
+    tarea_sel = st.selectbox("¿Qué necesitas hoy?", list(tareas.keys()), index=None, placeholder="Busca: Marketing, Logo, Web...")
     
-    tarea_seleccionada = st.selectbox(
-        "Selecciona un experto o tarea:",
-        options=lista_tareas,
-        index=None,
-        placeholder="Escribe para buscar (ej: logo, python, marketing)..."
-    )
-    
-    # --- LÓGICA PRINCIPAL ---
-    if tarea_seleccionada:
-        info = tareas_disponibles[tarea_seleccionada]
-        tipo_tarea = info.get("tipo", "texto") # Detectamos si es imagen o texto
-
-        # FEEDBACK VISUAL (Banner Verde)
-        st.success(f"✅ Experto asignado correctamente: **{tarea_seleccionada}**")
+    if tarea_sel:
+        info = tareas[tarea_sel]
+        st.success(f"✅ Rol Activo: **{tarea_sel}**")
         
-        # Detalles del rol
-        with st.expander(f"Ver detalles del Rol {info['icon']}"):
-            st.write(f"**Descripción:** {info['desc']}")
-            st.caption("Prompt de sistema optimizado cargado.")
-
-        # Interruptor de Internet (Solo visible si es tarea de texto)
-        usar_web = False
-        if tipo_tarea == "texto":
-            usar_web = st.toggle("🌍 Modo Online (Buscar en Google)", value=False)
-            if usar_web:
-                st.caption("⚡ La IA buscará datos en tiempo real antes de responder.")
-        
+        # --- ZONA DE CONTROL (INTERRUPTORES) ---
+        # Aquí permitimos que CUALQUIER rol tenga superpoderes
+        col1, col2 = st.columns(2)
+        with col1:
+            modo_web = st.toggle("🌍 Buscar en Web (Noticias)", value=False)
+        with col2:
+            modo_imagen = st.toggle("🎨 Generar Imagen (DALL-E)", value=False)
+            
+        if modo_imagen:
+            st.info("🖼️ Modo Imagen Activado: Describe lo que quieres dibujar.")
+        elif modo_web:
+            st.info("📰 Modo Online Activado: La IA buscará datos actuales.")
+            
         st.divider()
 
-        # --- MOSTRAR HISTORIAL ---
-        mensajes_db = cargar_historial(st.session_state.usuario)
-        
-        for msg in mensajes_db:
-            with st.chat_message(msg["role"]):
-                contenido = msg["content"]
-                # LÓGICA VISUAL: Si parece una URL de imagen, mostramos la foto
-                if contenido.startswith("http") and " " not in contenido:
-                    st.image(contenido, width=400)
+        # Historial
+        msgs = cargar_historial(st.session_state.usuario)
+        for m in msgs:
+            with st.chat_message(m["role"]):
+                if m["content"].startswith("http") and " " not in m["content"]:
+                    st.image(m["content"], width=300)
                 else:
-                    st.markdown(contenido)
+                    st.markdown(m["content"])
 
-        # --- INPUT DEL USUARIO ---
-        prompt = st.chat_input(f"Escribe tu instrucción para {tarea_seleccionada}...")
+        # Chat Input
+        prompt = st.chat_input(f"Escribe a tu {tarea_sel}...")
         
         if prompt:
-            # 1. Mostrar y Guardar lo que escribió el usuario
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            guardar_mensaje_historial(st.session_state.usuario, "user", prompt)
+            # Guardar User
+            with st.chat_message("user"): st.markdown(prompt)
+            guardar_historial(st.session_state.usuario, "user", prompt)
             
-            # 2. PROCESAMIENTO (CEREBRO)
-            with st.spinner(f"El experto {info['icon']} está trabajando en ello..."):
+            with st.spinner("Generando..."):
+                res_final = ""
                 
-                texto_para_guardar = ""
-                
-                # --- CAMINO A: GENERAR IMAGEN (DALL-E) ---
-                if tipo_tarea == "imagen":
-                    resultado = cerebro.generar_imagen_dalle(prompt, info['prompt'])
-                    
-                    if "Error" in resultado:
-                        st.error(resultado)
-                        texto_para_guardar = f"Error: {resultado}"
+                # --- LÓGICA UNIVERSAL: ¿IMAGEN O TEXTO? ---
+                if modo_imagen:
+                    # Generamos imagen SIN IMPORTAR EL ROL
+                    res_final = cerebro.generar_imagen_dalle(prompt, info['prompt'])
+                    if "Error" in res_final:
+                        st.error(res_final)
                     else:
-                        st.image(resultado, caption="Imagen Generada por DevMaster AI")
-                        texto_para_guardar = resultado # Guardamos la URL
-                
-                # --- CAMINO B: CHAT DE TEXTO (GPT-4o) ---
+                        st.image(res_final, caption="Imagen generada")
                 else:
-                    # Filtramos historial para no pasarle URLs de imágenes al chat de texto
-                    historial_ia = [
-                        {"role": m["role"], "content": m["content"]} 
-                        for m in mensajes_db[-5:] 
-                        if not m["content"].startswith("http")
-                    ]
-                    
-                    resultado = cerebro.respuesta_inteligente(
-                        mensaje_usuario=prompt,
-                        historial=historial_ia,
-                        prompt_rol=info['prompt'],
-                        usar_internet=usar_web
+                    # Generamos texto (con o sin internet)
+                    hist_ia = [m for m in msgs[-5:] if not m["content"].startswith("http")]
+                    res_final = cerebro.respuesta_inteligente(
+                        prompt, hist_ia, info['prompt'], modo_web
                     )
-                    st.markdown(resultado)
-                    texto_para_guardar = resultado
-
-            # 3. Guardar la respuesta de la IA en Firebase
-            guardar_mensaje_historial(st.session_state.usuario, "assistant", texto_para_guardar)
+                    st.markdown(res_final)
             
-    else:
-        st.info("👆 Por favor, selecciona una tarea en el menú de arriba para activar la IA.")
+            # Guardar IA
+            guardar_historial(st.session_state.usuario, "assistant", res_final)
 
-# ==========================================
-# ✨ MÓDULO: GENERADOR DE PROMPTS
-# ==========================================
-elif menu == "Generador Prompts":
-    st.header("✨ Refinador de Prompts")
-    st.markdown("Si no sabes cómo pedirle algo a la IA, escribe tu idea vaga aquí y te daré el prompt perfecto.")
-    
-    c1, c2 = st.columns([2,1])
-    with c1:
-        idea = st.text_area("Idea básica:", "Ej: Quiero un plan de dieta.")
-    with c2:
-        tipo = st.selectbox("Formato:", ["Texto", "Imagen", "Código"])
-        
-    if st.button("Mejorar Prompt"):
-        with st.spinner("Optimizando..."):
-            # Usamos una función simple de cerebro (puedes reutilizar respuesta_inteligente o crear una específica)
-            prompt_sistema = "Eres un experto en Prompt Engineering. Mejora la idea del usuario."
-            res = cerebro.respuesta_inteligente(f"Mejora esta idea para {tipo}: {idea}", [], prompt_sistema, False)
-            st.code(res)
-
-# ==========================================
-# 👤 MÓDULO: MI CUENTA
-# ==========================================
 elif menu == "Mi Cuenta":
-    st.header("Panel de Usuario")
-    st.info(f"Usuario: {st.session_state.usuario}")
-    st.warning(f"Plan Actual: {st.session_state.plan}")
-    st.caption("Próximamente: Historial de facturación y Upgrade a PRO.")
+    st.header(f"Usuario: {st.session_state.usuario}")
+    if st.button("Salir"):
+        st.session_state.usuario = None
+        st.rerun()
