@@ -65,9 +65,30 @@ def crear_user(u, p):
     db.collection("users").document(u).set({"password": p, "plan": "Gratis"})
     return True
 
-# --- 4. INTERFAZ ---
+# --- 4. GESTIÓN DE SESIÓN PERSISTENTE (AUTO-LOGIN) ---
 if "usuario" not in st.session_state: st.session_state.usuario = None
 if "chat_id" not in st.session_state: st.session_state.chat_id = None
+
+def auto_login():
+    """Recupera el usuario de la URL si se recarga la página"""
+    # Verificamos si hay un usuario en los parámetros de la URL
+    params = st.query_params
+    if "user_token" in params and st.session_state.usuario is None:
+        st.session_state.usuario = params["user_token"]
+
+def guardar_sesion_url(usuario):
+    """Guarda el usuario en la URL para que no se pierda al F5"""
+    st.query_params["user_token"] = usuario
+
+def cerrar_sesion_url():
+    """Limpia la URL"""
+    st.query_params.clear()
+    st.session_state.usuario = None
+    st.session_state.chat_id = None
+    st.rerun()
+
+# Ejecutamos auto-login al iniciar
+auto_login()
 
 # Callback para limpiar chat al cambiar rol
 def al_cambiar_rol():
@@ -80,6 +101,7 @@ st.sidebar.title("🔥 DevMaster AI")
 
 if not st.session_state.usuario:
     # --- LOGIN EN SIDEBAR ---
+    st.info("Inicia sesión para continuar")
     tab1, tab2 = st.sidebar.tabs(["Login", "Registro"])
     with tab1:
         u = st.text_input("User")
@@ -87,6 +109,7 @@ if not st.session_state.usuario:
         if st.button("Entrar"):
             if login(u, p):
                 st.session_state.usuario = u
+                guardar_sesion_url(u) # <--- GUARDAMOS SESIÓN
                 st.rerun()
             else: st.error("Error")
     with tab2:
@@ -100,60 +123,61 @@ else:
     # --- USUARIO LOGUEADO ---
     st.sidebar.caption(f"Hola, {st.session_state.usuario}")
     
-    # 1. BOTÓN NUEVO CHAT (Siempre arriba)
     if st.sidebar.button("➕ Nuevo Chat", use_container_width=True, type="primary"):
         st.session_state.chat_id = None
         st.rerun()
     
     st.sidebar.divider()
 
-    # 2. PANEL DE CONTROL (ROLES Y HERRAMIENTAS)
+    # 2. PANEL DE CONTROL
     st.sidebar.subheader("🛠️ Panel de Control")
     
     tareas = cerebro.obtener_tareas()
+    lista_tareas = list(tareas.keys())
     
-    # Selector de Rol (Ahora fijo en la izquierda)
+    # Buscamos el índice del Asistente General para que sea el default
+    index_default = 0
+    if "Asistente General" in lista_tareas:
+        index_default = lista_tareas.index("Asistente General")
+
+    # Selector de Rol (Ya no empieza vacío, empieza en Default)
     tarea_sel = st.sidebar.selectbox(
         "Selecciona Experto:", 
-        list(tareas.keys()), 
-        index=None, 
-        placeholder="Buscar rol...",
+        lista_tareas, 
+        index=index_default, 
         on_change=al_cambiar_rol
     )
     
-    # Interruptores (Ahora fijos debajo del rol)
     c1, c2 = st.sidebar.columns(2)
     with c1: web = st.toggle("🌍 Web", False, help="Buscar en Internet")
     with c2: img = st.toggle("🎨 Img", False, help="Generar Imagen DALL-E")
 
     st.sidebar.divider()
 
-    # 3. HISTORIAL DE CHATS
+    # 3. HISTORIAL
     st.sidebar.subheader("🗂️ Historial")
     sesiones = obtener_sesiones(st.session_state.usuario)
     for sid, sdata in sesiones:
-        # Estilo del botón: Resaltado si es el chat actual
         tipo_boton = "primary" if sid == st.session_state.chat_id else "secondary"
         if st.sidebar.button(f"💬 {sdata.get('titulo','Chat')}", key=sid, type=tipo_boton, use_container_width=True):
             st.session_state.chat_id = sid
             st.rerun()
 
-    # 4. SALIR
     st.sidebar.divider()
     if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.usuario = None
-        st.session_state.chat_id = None
-        st.rerun()
+        cerrar_sesion_url() # <--- LIMPIAMOS SESIÓN
 
     # ==========================================
-    # 🖥️ ÁREA PRINCIPAL (CHAT LIMPIO)
+    # 🖥️ ÁREA PRINCIPAL
     # ==========================================
     
+    # Siempre habrá tarea seleccionada porque quitamos el index=None
     if tarea_sel:
         info = tareas[tarea_sel]
         
-        # Título dinámico en el chat
-        st.subheader(f"{info['icon']} {tarea_sel}")
+        st.subheader(f"{info.get('icon', '🤖')} {tarea_sel}")
+        
+        # Avisos de modo
         if img: st.caption("✨ Modo Generación de Imágenes Activado")
         if web: st.caption("🌐 Modo Búsqueda Online Activado")
 
@@ -162,8 +186,13 @@ else:
         if st.session_state.chat_id:
             msgs = cargar_mensajes(st.session_state.usuario, st.session_state.chat_id)
         else:
-            # Mensaje de bienvenida del rol
-            st.info(f"👋 **¡Listo!** Soy tu {tarea_sel}. {info['desc']}")
+            # Mensaje de bienvenida inicial
+            st.markdown(f"""
+            <div style='background-color: #262730; padding: 15px; border-radius: 10px; margin-bottom: 20px;'>
+                👋 <b>¡Bienvenido!</b> Soy tu experto en <b>{tarea_sel}</b>.<br>
+                {info['desc']}
+            </div>
+            """, unsafe_allow_html=True)
 
         # Renderizar Chat
         for m in msgs:
@@ -173,15 +202,16 @@ else:
                 else:
                     st.markdown(m["content"])
 
-        # INPUT (Siempre abajo)
+        # INPUT (Ahora garantizado que aparece)
         prompt = st.chat_input(f"Escribe a tu {tarea_sel}...")
 
         if prompt:
-            # 1. Crear Sesión si no existe
             es_nuevo = False
+            # 1. Crear Sesión si no existe
             if not st.session_state.chat_id:
                 es_nuevo = True
-                with st.spinner("Creando sala..."):
+                with st.spinner("Iniciando conversación..."):
+                    # Usamos el generador de títulos de cerebro
                     titulo = cerebro.generar_titulo_corto(prompt)
                     st.session_state.chat_id = crear_sesion_con_titulo(st.session_state.usuario, tarea_sel, titulo)
             
@@ -190,17 +220,14 @@ else:
             with st.chat_message("user"): st.markdown(prompt)
             
             # 3. Procesar IA
-            with st.spinner("Trabajando..."):
+            with st.spinner("Generando respuesta..."):
                 res = ""
                 if img:
-                    # USAMOS EL FIX DE ESTILO AQUÍ:
                     estilo = info.get('image_style', info['prompt'])
                     res = cerebro.generar_imagen_dalle(prompt, estilo)
-                    
                     if "http" in res: st.image(res)
                     else: st.error(res)
                 else:
-                    # Texto normal
                     hist_ia = [m for m in msgs if not m["content"].startswith("http")]
                     res = cerebro.respuesta_inteligente(prompt, hist_ia, info['prompt'], web)
                     st.markdown(res)
@@ -208,14 +235,5 @@ else:
             # 4. Guardar IA
             guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "assistant", res)
             
-            # 5. Actualizar sidebar si es nuevo
+            # 5. Recargar para actualizar sidebar (solo si es nuevo)
             if es_nuevo: st.rerun()
-
-    else:
-        # Pantalla de inicio vacía (cuando no hay rol seleccionado)
-        st.markdown("""
-        <div style='text-align: center; padding-top: 50px;'>
-            <h1>🔥 DevMaster AI</h1>
-            <h3>Selecciona un Experto en el menú de la izquierda para comenzar 👈</h3>
-        </div>
-        """, unsafe_allow_html=True)
