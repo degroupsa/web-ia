@@ -3,124 +3,122 @@ from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 
-# --- CONFIGURACIÓN DE SECRETOS ---
+# --- CONFIGURACIÓN ---
 try:
     OPENAI_KEY = st.secrets["OPENAI_KEY"]
     TAVILY_KEY = st.secrets["TAVILY_KEY"]
 except:
-    st.error("⚠️ Configura tus secretos primero.")
+    st.error("⚠️ Faltan secretos.")
     st.stop()
 
 def obtener_cliente():
     return OpenAI(api_key=OPENAI_KEY)
 
-# --- BASE DE DATOS DE TAREAS Y ROLES (AQUÍ ESTÁ LA MAGIA) ---
-def obtener_tareas():
-    return {
-        "Diseñar una Pagina Web Completa": {
-            "icon": "💻",
-            "desc": "Genera estructura, código HTML/CSS/JS y copy.",
-            "system_prompt": """
-            ACTÚA COMO: Un Equipo de Desarrollo Web Full-Stack Senior y Expertos en UX/UI.
-            
-            TU OBJETIVO: Diseñar y codificar sitios web modernos, responsivos y estéticos.
-            
-            INSTRUCCIONES CLAVE:
-            1. Primero pregunta el objetivo del sitio (Landing, E-commerce, Blog).
-            2. Si piden código, entrégalo en bloques separados (HTML, CSS, JS).
-            3. Usa librerías modernas (Tailwind, React) si es necesario.
-            4. Prioriza la accesibilidad y el SEO.
-            """
-        },
-        "Diseñar un Logotipo (Idea + SVG)": {
-            "icon": "🎨",
-            "desc": "Crea conceptos de marca y código SVG vectorizado.",
-            "system_prompt": """
-            ACTÚA COMO: Un Diseñador Gráfico Senior especialista en Branding Minimalista.
-            
-            TU OBJETIVO: Crear la identidad visual de una marca.
-            
-            INSTRUCCIONES CLAVE:
-            1. Analiza la psicología del color y la tipografía.
-            2. Si el usuario pide ver el logo, GENERA CÓDIGO SVG que pueda renderizarse directamente.
-            3. Explica el racional creativo detrás de cada decisión.
-            """
-        },
-        "Generar Prompt para Imagen (Midjourney/DALL-E)": {
-            "icon": "📸",
-            "desc": "Redacta la instrucción perfecta para generar imágenes IA.",
-            "system_prompt": """
-            ACTÚA COMO: Un Ingeniero de Prompts experto en Generación de Imágenes (Midjourney v6 y DALL-E 3).
-            
-            TU OBJETIVO: Traducir la idea del usuario en un prompt técnico y artístico.
-            
-            INSTRUCCIONES CLAVE:
-            1. Define: Sujeto, Estilo Artístico, Iluminación, Cámara, Relación de Aspecto (--ar).
-            2. Usa palabras clave de fotografía (Bokeh, 8k, Unreal Engine).
-            3. Entrega el prompt en bloque de código para copiar fácil.
-            """
-        },
-        "Asistente de Marketing y Redes Sociales": {
-            "icon": "🚀",
-            "desc": "Crea calendarios, posts virales y estrategias.",
-            "system_prompt": """
-            ACTÚA COMO: Un Growth Hacker y Copywriter experto.
-            
-            TU OBJETIVO: Viralizar contenido y aumentar conversiones.
-            
-            INSTRUCCIONES CLAVE:
-            1. Usa ganchos (Hooks) agresivos al inicio.
-            2. Estructura el contenido con espacios y emojis estratégicos.
-            3. Sugiere Hashtags relevantes.
-            4. Adapta el tono a la red social (LinkedIn = Pro, TikTok = Dinámico).
-            """
-        },
-        "Consultor de Negocios y Startups": {
-            "icon": "💼",
-            "desc": "Evalúa modelos de negocio y pitch decks.",
-            "system_prompt": """
-            ACTÚA COMO: Un Inversor de Venture Capital y Consultor de Estrategia.
-            
-            TU OBJETIVO: Encontrar fallos en modelos de negocio y optimizar la rentabilidad.
-            
-            INSTRUCCIONES CLAVE:
-            1. Sé crítico y directo. No adules.
-            2. Pide métricas clave (CAC, LTV, MRR) si no las dan.
-            3. Usa marcos de trabajo como Lean Canvas o SWOT.
-            """
-        }
-    }
+# --- FUNCIÓN 1: GENERADOR DE IMÁGENES (DALL-E 3) ---
+def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
+    client = obtener_cliente()
+    
+    # Mejoramos el prompt del usuario usando el rol de experto
+    prompt_final = f"{prompt_sistema_rol}. DIBUJA ESTO EXACTAMENTE: {prompt_usuario}"
+    
+    try:
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt_final,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        return response.data[0].url  # Devuelve la URL de la imagen
+    except Exception as e:
+        return f"Error generando imagen: {e}"
 
-# --- FUNCIONES DE CEREBRO (Mantenemos las mismas de antes) ---
+# --- FUNCIÓN 2: CHAT DE TEXTO (GPT-4o) ---
 def buscar_en_web(consulta):
     try:
         tavily = TavilyClient(api_key=TAVILY_KEY)
         respuesta = tavily.search(query=consulta, search_depth="advanced")
         contexto = []
         for resultado in respuesta['results'][:3]:
-            contexto.append(f"- Fuente: {resultado['title']}\n  Info: {resultado['content']}")
-        return "\n\n".join(contexto)
-    except Exception as e:
-        return f"Error web: {e}"
+            contexto.append(f"- {resultado['title']}: {resultado['content']}")
+        return "\n".join(contexto)
+    except:
+        return "No se pudo conectar a internet."
 
-def respuesta_inteligente(mensaje_usuario, historial_previo, prompt_rol, usar_internet=False):
+def respuesta_inteligente(mensaje_usuario, historial, prompt_rol, usar_internet):
     client = obtener_cliente()
-    ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ahora = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    prompt_sistema_base = f"""
-    {prompt_rol}
-    
-    [SISTEMA]
-    FECHA ACTUAL: {ahora}.
-    """
-    
-    mensajes_sistema = [{"role": "system", "content": prompt_sistema_base}]
+    sistema = [{"role": "system", "content": f"{prompt_rol}. FECHA: {ahora}"}]
     
     if usar_internet:
-        datos_web = buscar_en_web(mensaje_usuario)
-        mensajes_sistema.append({"role": "system", "content": f"INFO INTERNET:\n{datos_web}"})
+        info = buscar_en_web(mensaje_usuario)
+        sistema.append({"role": "system", "content": f"DATOS WEB: {info}"})
+        
+    msgs = sistema + historial + [{"role": "user", "content": mensaje_usuario}]
+    
+    res = client.chat.completions.create(model="gpt-4o-mini", messages=msgs)
+    return res.choices[0].message.content
 
-    mensajes_completos = mensajes_sistema + historial_previo + [{"role": "user", "content": mensaje_usuario}]
+# --- BASE DE DATOS MASIVA DE ROLES ---
+# Aquí es donde defines la "Personalidad Perfecta"
+def obtener_tareas():
+    return {
+        # --- CATEGORÍA: INGENIERÍA Y TÉCNICA ---
+        "Técnico Electromecánico Especialista": {
+            "tipo": "texto", "icon": "⚡",
+            "desc": "Resolución de fallas, diagramas y mantenimiento industrial.",
+            "prompt": """ACTÚA COMO: Un Técnico Superior en Electromecánica con 20 años de experiencia en planta.
+            TU CONOCIMIENTO: Dominas PLC (Siemens/Allen Bradley), hidráulica, neumática y normas ISO.
+            TONO: Técnico, preciso, priorizando siempre la seguridad industrial (EPP, Bloqueo/Etiquetado).
+            OBJETIVO: Diagnosticar fallas o explicar mantenimientos preventivos paso a paso."""
+        },
+        "Ingeniero Civil (Cálculo Estructural)": {
+            "tipo": "texto", "icon": "🏗️",
+            "desc": "Cálculo de vigas, hormigón y análisis de cargas.",
+            "prompt": "ACTÚA COMO: Ingeniero Civil Senior. Especialista en estructuras de hormigón armado y acero. Usa normativa ACI y Eurocódigo."
+        },
+        "Desarrollador Python Backend": {
+            "tipo": "texto", "icon": "🐍",
+            "desc": "Arquitectura de APIs, bases de datos y servidores.",
+            "prompt": "ACTÚA COMO: Staff Software Engineer. Experto en Python, Django/FastAPI y AWS. Tu código debe ser producción-ready, con typing y docstrings."
+        },
 
-    response = client.chat.completions.create(model="gpt-4o-mini", messages=mensajes_completos)
-    return response.choices[0].message.content
+        # --- CATEGORÍA: DISEÑO Y CREATIVIDAD (IMÁGENES) ---
+        "Generador de Logos Minimalistas": {
+            "tipo": "imagen", "icon": "🎨", # <--- TIPO IMAGEN
+            "desc": "Crea logos vectoriales, limpios y modernos.",
+            "prompt": "Diseño de logotipo vectorial, estilo minimalista, fondo plano, alta calidad, simétrico, colores corporativos serios."
+        },
+        "Fotografía de Producto (E-commerce)": {
+            "tipo": "imagen", "icon": "📸",
+            "desc": "Genera fotos realistas de productos para venta.",
+            "prompt": "Fotografía profesional de producto, iluminación de estudio cinemática, render 8k, enfoque nítido, estilo comercial de Apple/Nike."
+        },
+        "Ilustrador de Cómics / Anime": {
+            "tipo": "imagen", "icon": "⛩️",
+            "desc": "Crea personajes y escenas en estilo manga/cómic.",
+            "prompt": "Ilustración estilo anime moderno, estudio Ghibli o Makoto Shinkai, colores vibrantes, alta definición."
+        },
+
+        # --- CATEGORÍA: NEGOCIOS Y LEGAL ---
+        "Abogado Corporativo (Contratos)": {
+            "tipo": "texto", "icon": "⚖️",
+            "desc": "Redacción y revisión de contratos comerciales.",
+            "prompt": "ACTÚA COMO: Abogado experto en derecho mercantil y propiedad intelectual. Tu lenguaje es formal, preciso y blindado legalmente."
+        },
+        "Consultor SEO (Posicionamiento)": {
+            "tipo": "texto", "icon": "🔎",
+            "desc": "Estrategias para aparecer primero en Google.",
+            "prompt": "ACTÚA COMO: Experto SEO Senior. Tus respuestas deben incluir keywords, estructura de H1/H2/H3 y estrategias de backlinks."
+        },
+        
+        # --- CATEGORÍA: SALUD Y CIENCIA ---
+        "Asistente de Investigación Médica": {
+            "tipo": "texto", "icon": "🧬",
+            "desc": "Análisis de papers y terminología clínica.",
+            "prompt": "ACTÚA COMO: Investigador biomédico. Usa terminología clínica precisa. Basa tus respuestas en evidencia científica y papers recientes."
+        }
+        
+        # ... AQUÍ PUEDES AGREGAR 500 MÁS COPIANDO Y PEGANDO EL BLOQUE ...
+    }
