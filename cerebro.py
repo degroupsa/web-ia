@@ -3,23 +3,22 @@ from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN DE SECRETOS ---
 try:
     OPENAI_KEY = st.secrets["OPENAI_KEY"]
     TAVILY_KEY = st.secrets["TAVILY_KEY"]
 except:
-    st.error("⚠️ Faltan secretos.")
+    st.error("⚠️ Faltan las claves en los Secretos (secrets.toml).")
     st.stop()
 
 def obtener_cliente():
     return OpenAI(api_key=OPENAI_KEY)
 
-# --- FUNCIÓN 1: GENERADOR DE IMÁGENES (DALL-E 3) ---
+# --- FUNCIÓN 1: GENERAR IMAGEN (DALL-E 3) ---
 def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
     client = obtener_cliente()
-    
-    # Mejoramos el prompt del usuario usando el rol de experto
-    prompt_final = f"{prompt_sistema_rol}. DIBUJA ESTO EXACTAMENTE: {prompt_usuario}"
+    # Combinamos la petición del usuario con el estilo del experto
+    prompt_final = f"{prompt_sistema_rol}. DIBUJA ESTO: {prompt_usuario}"
     
     try:
         response = client.images.generate(
@@ -29,11 +28,11 @@ def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
             quality="standard",
             n=1,
         )
-        return response.data[0].url  # Devuelve la URL de la imagen
+        return response.data[0].url
     except Exception as e:
         return f"Error generando imagen: {e}"
 
-# --- FUNCIÓN 2: CHAT DE TEXTO (GPT-4o) ---
+# --- FUNCIÓN 2: BUSCAR EN WEB (TAVILY) ---
 def buscar_en_web(consulta):
     try:
         tavily = TavilyClient(api_key=TAVILY_KEY)
@@ -45,80 +44,116 @@ def buscar_en_web(consulta):
     except:
         return "No se pudo conectar a internet."
 
+# --- FUNCIÓN 3: CEREBRO DE TEXTO (GPT-4o) ---
 def respuesta_inteligente(mensaje_usuario, historial, prompt_rol, usar_internet):
     client = obtener_cliente()
     ahora = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    sistema = [{"role": "system", "content": f"{prompt_rol}. FECHA: {ahora}"}]
+    # Inyectamos el rol y la fecha
+    sistema = [{"role": "system", "content": f"{prompt_rol}. HOY ES: {ahora}"}]
     
     if usar_internet:
         info = buscar_en_web(mensaje_usuario)
-        sistema.append({"role": "system", "content": f"DATOS WEB: {info}"})
+        sistema.append({"role": "system", "content": f"INFORMACIÓN DE INTERNET:\n{info}"})
         
     msgs = sistema + historial + [{"role": "user", "content": mensaje_usuario}]
     
     res = client.chat.completions.create(model="gpt-4o-mini", messages=msgs)
     return res.choices[0].message.content
 
-# --- BASE DE DATOS MASIVA DE ROLES ---
-# Aquí es donde defines la "Personalidad Perfecta"
+# --- BASE DE DATOS DE TAREAS (LENGUAJE SENCILLO) ---
 def obtener_tareas():
     return {
-        # --- CATEGORÍA: INGENIERÍA Y TÉCNICA ---
-        "Técnico Electromecánico Especialista": {
-            "tipo": "texto", "icon": "⚡",
-            "desc": "Resolución de fallas, diagramas y mantenimiento industrial.",
-            "prompt": """ACTÚA COMO: Un Técnico Superior en Electromecánica con 20 años de experiencia en planta.
-            TU CONOCIMIENTO: Dominas PLC (Siemens/Allen Bradley), hidráulica, neumática y normas ISO.
-            TONO: Técnico, preciso, priorizando siempre la seguridad industrial (EPP, Bloqueo/Etiquetado).
-            OBJETIVO: Diagnosticar fallas o explicar mantenimientos preventivos paso a paso."""
+        # --- CREATIVIDAD VISUAL (IMÁGENES) ---
+        "Diseñar un Logo": {
+            "tipo": "imagen", "icon": "🎨",
+            "desc": "Crea logotipos únicos para tu marca o proyecto.",
+            "prompt": "Diseño de logotipo profesional, vectorial, minimalista, fondo plano, alta calidad, estilo moderno."
         },
-        "Ingeniero Civil (Cálculo Estructural)": {
-            "tipo": "texto", "icon": "🏗️",
-            "desc": "Cálculo de vigas, hormigón y análisis de cargas.",
-            "prompt": "ACTÚA COMO: Ingeniero Civil Senior. Especialista en estructuras de hormigón armado y acero. Usa normativa ACI y Eurocódigo."
-        },
-        "Desarrollador Python Backend": {
-            "tipo": "texto", "icon": "🐍",
-            "desc": "Arquitectura de APIs, bases de datos y servidores.",
-            "prompt": "ACTÚA COMO: Staff Software Engineer. Experto en Python, Django/FastAPI y AWS. Tu código debe ser producción-ready, con typing y docstrings."
-        },
-
-        # --- CATEGORÍA: DISEÑO Y CREATIVIDAD (IMÁGENES) ---
-        "Generador de Logos Minimalistas": {
-            "tipo": "imagen", "icon": "🎨", # <--- TIPO IMAGEN
-            "desc": "Crea logos vectoriales, limpios y modernos.",
-            "prompt": "Diseño de logotipo vectorial, estilo minimalista, fondo plano, alta calidad, simétrico, colores corporativos serios."
-        },
-        "Fotografía de Producto (E-commerce)": {
+        "Crear una Imagen Realista": {
             "tipo": "imagen", "icon": "📸",
-            "desc": "Genera fotos realistas de productos para venta.",
-            "prompt": "Fotografía profesional de producto, iluminación de estudio cinemática, render 8k, enfoque nítido, estilo comercial de Apple/Nike."
+            "desc": "Genera fotos que parecen tomadas con cámara real.",
+            "prompt": "Fotografía hiperrealista, 8k, iluminación cinemática, lente de 85mm, alta definición, estilo National Geographic."
         },
-        "Ilustrador de Cómics / Anime": {
+        "Crear Personaje de Anime/Cómic": {
             "tipo": "imagen", "icon": "⛩️",
-            "desc": "Crea personajes y escenas en estilo manga/cómic.",
-            "prompt": "Ilustración estilo anime moderno, estudio Ghibli o Makoto Shinkai, colores vibrantes, alta definición."
+            "desc": "Dibuja personajes en estilo japonés o historieta.",
+            "prompt": "Ilustración estilo anime de alta calidad, estudio Ghibli, colores vibrantes, diseño de personajes detallado."
+        },
+        "Diseñar Iconos para Apps": {
+            "tipo": "imagen", "icon": "📱",
+            "desc": "Genera el icono perfecto para la tienda de aplicaciones.",
+            "prompt": "Icono de aplicación móvil iOS, diseño plano o 3D suave, esquinas redondeadas, fondo simple, estilo Apple App Store."
         },
 
-        # --- CATEGORÍA: NEGOCIOS Y LEGAL ---
-        "Abogado Corporativo (Contratos)": {
+        # --- PROGRAMACIÓN Y WEB (TEXTO) ---
+        "Crear una Página Web": {
+            "tipo": "texto", "icon": "💻",
+            "desc": "Te ayudo a escribir el código HTML, CSS y JS.",
+            "prompt": "ACTÚA COMO: Desarrollador Web Senior. Tu objetivo es entregar código limpio, moderno y responsivo. Pregunta si prefieren HTML simple o React. Entrega el código en bloques separados."
+        },
+        "Crear una App Móvil": {
+            "tipo": "texto", "icon": "📲",
+            "desc": "Ayuda con Flutter, React Native o Swift.",
+            "prompt": "ACTÚA COMO: Desarrollador de Apps Móviles Experto. Ayuda a planificar la arquitectura y escribe código para interfaces de usuario modernas."
+        },
+        "Arreglar mi Código (Debug)": {
+            "tipo": "texto", "icon": "🔧",
+            "desc": "Pégame tu código roto y yo encuentro el error.",
+            "prompt": "ACTÚA COMO: Senior Software Engineer. Analiza el código del usuario, encuentra el error, explícalo y escribe la versión corregida."
+        },
+        "Ayuda con Excel y Fórmulas": {
+            "tipo": "texto", "icon": "📊",
+            "desc": "Crea fórmulas complejas, macros o análisis de datos.",
+            "prompt": "ACTÚA COMO: Experto en Microsoft Excel y Data Analysis. Escribe fórmulas complejas, macros en VBA o scripts de Google Sheets. Explica paso a paso."
+        },
+
+        # --- ESCRITURA Y TRABAJO (TEXTO) ---
+        "Redactar Correo Profesional": {
+            "tipo": "texto", "icon": "📧",
+            "desc": "Escribe emails formales, de ventas o solicitudes.",
+            "prompt": "ACTÚA COMO: Experto en Comunicación Corporativa. Redacta correos electrónicos formales, persuasivos y sin faltas de ortografía. Ajusta el tono según el destinatario."
+        },
+        "Mejorar mi CV / Hoja de Vida": {
+            "tipo": "texto", "icon": "📄",
+            "desc": "Optimiza tu currículum para conseguir empleo.",
+            "prompt": "ACTÚA COMO: Reclutador de Recursos Humanos (HR). Analiza el perfil del usuario, mejora la redacción, destaca logros y usa palabras clave para pasar filtros ATS."
+        },
+        "Crear Post para Redes Sociales": {
+            "tipo": "texto", "icon": "🚀",
+            "desc": "Ideas y textos virales para Instagram, LinkedIn o TikTok.",
+            "prompt": "ACTÚA COMO: Community Manager experto. Crea calendarios de contenido, escribe captions con ganchos (hooks) atractivos y sugiere hashtags relevantes."
+        },
+        "Traducir Texto": {
+            "tipo": "texto", "icon": "🌍",
+            "desc": "Traducción perfecta a cualquier idioma.",
+            "prompt": "ACTÚA COMO: Traductor Jurado Profesional. Traduce el texto manteniendo el tono, la intención y los matices culturales. No traduzcas literalmente, interpreta."
+        },
+
+        # --- VIDA DIARIA Y OTROS (TEXTO) ---
+        "Asistente General (Chat Normal)": {
+            "tipo": "texto", "icon": "🤖",
+            "desc": "Pregúntame lo que quieras, soy ChatGPT.",
+            "prompt": "Eres un asistente de inteligencia artificial útil, amable y eficiente. Responde de manera clara y concisa."
+        },
+        "Profesor de Inglés": {
+            "tipo": "texto", "icon": "🎓",
+            "desc": "Practica conversación o pide explicaciones gramaticales.",
+            "prompt": "ACTÚA COMO: Profesor nativo de inglés (ESL Teacher). Corrige los errores del usuario amablemente, explica la gramática y propón ejercicios."
+        },
+        "Chef / Recetas de Cocina": {
+            "tipo": "texto", "icon": "🍳",
+            "desc": "Dime qué ingredientes tienes y te doy una receta.",
+            "prompt": "ACTÚA COMO: Chef Estrella Michelin. Sugiere recetas deliciosas, explica las técnicas de cocción y ofrece alternativas si faltan ingredientes."
+        },
+        "Entrenador Personal / Gym": {
+            "tipo": "texto", "icon": "💪",
+            "desc": "Planes de ejercicio y consejos de nutrición.",
+            "prompt": "ACTÚA COMO: Entrenador Personal certificado. Crea rutinas de ejercicios seguras y efectivas. Da consejos generales de nutrición (con disclaimer médico)."
+        },
+        "Asesor Legal / Abogado": {
             "tipo": "texto", "icon": "⚖️",
-            "desc": "Redacción y revisión de contratos comerciales.",
-            "prompt": "ACTÚA COMO: Abogado experto en derecho mercantil y propiedad intelectual. Tu lenguaje es formal, preciso y blindado legalmente."
-        },
-        "Consultor SEO (Posicionamiento)": {
-            "tipo": "texto", "icon": "🔎",
-            "desc": "Estrategias para aparecer primero en Google.",
-            "prompt": "ACTÚA COMO: Experto SEO Senior. Tus respuestas deben incluir keywords, estructura de H1/H2/H3 y estrategias de backlinks."
-        },
-        
-        # --- CATEGORÍA: SALUD Y CIENCIA ---
-        "Asistente de Investigación Médica": {
-            "tipo": "texto", "icon": "🧬",
-            "desc": "Análisis de papers y terminología clínica.",
-            "prompt": "ACTÚA COMO: Investigador biomédico. Usa terminología clínica precisa. Basa tus respuestas en evidencia científica y papers recientes."
+            "desc": "Ayuda con contratos y dudas legales generales.",
+            "prompt": "ACTÚA COMO: Abogado consultor. Explica términos legales complejos en lenguaje sencillo. Revisa contratos. IMPORTANTE: Siempre aclara que esto no es un consejo legal vinculante."
         }
-        
-        # ... AQUÍ PUEDES AGREGAR 500 MÁS COPIANDO Y PEGANDO EL BLOQUE ...
     }
