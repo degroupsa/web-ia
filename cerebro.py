@@ -17,8 +17,8 @@ def obtener_cliente():
 # --- FUNCIÓN 1: GENERAR IMAGEN (DALL-E 3) ---
 def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
     client = obtener_cliente()
-    # Combinamos la petición del usuario con el estilo del experto
-    prompt_final = f"{prompt_sistema_rol}. DIBUJA ESTO: {prompt_usuario}"
+    # Usamos el estilo del rol para guiar la imagen
+    prompt_final = f"ESTILO VISUAL: {prompt_sistema_rol}. DIBUJA: {prompt_usuario}"
     
     try:
         response = client.images.generate(
@@ -49,7 +49,6 @@ def respuesta_inteligente(mensaje_usuario, historial, prompt_rol, usar_internet)
     client = obtener_cliente()
     ahora = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # Inyectamos el rol y la fecha
     sistema = [{"role": "system", "content": f"{prompt_rol}. HOY ES: {ahora}"}]
     
     if usar_internet:
@@ -61,99 +60,100 @@ def respuesta_inteligente(mensaje_usuario, historial, prompt_rol, usar_internet)
     res = client.chat.completions.create(model="gpt-4o-mini", messages=msgs)
     return res.choices[0].message.content
 
-# --- BASE DE DATOS DE TAREAS (LENGUAJE SENCILLO) ---
+# --- BASE DE DATOS DE TAREAS (EXPANDIDA) ---
 def obtener_tareas():
     return {
-        # --- CREATIVIDAD VISUAL (IMÁGENES) ---
-        "Diseñar un Logo": {
-            "tipo": "imagen", "icon": "🎨",
-            "desc": "Crea logotipos únicos para tu marca o proyecto.",
-            "prompt": "Diseño de logotipo profesional, vectorial, minimalista, fondo plano, alta calidad, estilo moderno."
+        # --- MARKETING Y REDES SOCIALES (NUEVO & MASIVO) ---
+        "Experto en Instagram (Posts y Stories)": {
+            "icon": "📸", "desc": "Crea captions, ideas de stories y estrategias visuales.",
+            "prompt": "ACTÚA COMO: Instagram Strategist. Crea captions con ganchos (hooks) iniciales, usa emojis estratégicos, saltos de línea y grupos de hashtags relevantes. Prioriza el engagement y los comentarios."
         },
-        "Crear una Imagen Realista": {
-            "tipo": "imagen", "icon": "📸",
-            "desc": "Genera fotos que parecen tomadas con cámara real.",
-            "prompt": "Fotografía hiperrealista, 8k, iluminación cinemática, lente de 85mm, alta definición, estilo National Geographic."
+        "Guionista de TikTok / Reels Viral": {
+            "icon": "🎵", "desc": "Guiones paso a paso para videos cortos que enganchen.",
+            "prompt": "ACTÚA COMO: Guionista de Video Viral. Estructura la respuesta así: 1. Gancho Visual (0-3 seg), 2. Desarrollo del problema, 3. Solución/Twist, 4. Call to Action (CTA). Sé dinámico y rápido."
         },
-        "Crear Personaje de Anime/Cómic": {
-            "tipo": "imagen", "icon": "⛩️",
-            "desc": "Dibuja personajes en estilo japonés o historieta.",
-            "prompt": "Ilustración estilo anime de alta calidad, estudio Ghibli, colores vibrantes, diseño de personajes detallado."
+        "Redactor de Anuncios (Facebook/Instagram Ads)": {
+            "icon": "📢", "desc": "Textos persuasivos para vender (Copywriting).",
+            "prompt": "ACTÚA COMO: Experto en Paid Media Copywriting. Usa fórmulas de venta como AIDA (Atención, Interés, Deseo, Acción) o PAS (Problema, Agitación, Solución). Tu objetivo es que la gente haga clic en 'Comprar'."
         },
-        "Diseñar Iconos para Apps": {
-            "tipo": "imagen", "icon": "📱",
-            "desc": "Genera el icono perfecto para la tienda de aplicaciones.",
-            "prompt": "Icono de aplicación móvil iOS, diseño plano o 3D suave, esquinas redondeadas, fondo simple, estilo Apple App Store."
+        "Especialista en LinkedIn (Marca Personal)": {
+            "icon": "💼", "desc": "Posts profesionales para liderar en tu industria.",
+            "prompt": "ACTÚA COMO: LinkedIn Top Voice. Escribe posts con un tono profesional pero humano (Storytelling). Estructura: Frase impactante, historia personal/profesional, lección aprendida y pregunta para debate."
         },
-
-        # --- PROGRAMACIÓN Y WEB (TEXTO) ---
-        "Crear una Página Web": {
-            "tipo": "texto", "icon": "💻",
-            "desc": "Te ayudo a escribir el código HTML, CSS y JS.",
-            "prompt": "ACTÚA COMO: Desarrollador Web Senior. Tu objetivo es entregar código limpio, moderno y responsivo. Pregunta si prefieren HTML simple o React. Entrega el código en bloques separados."
+        "Email Marketing / Newsletters": {
+            "icon": "📧", "desc": "Correos que la gente sí quiera abrir y leer.",
+            "prompt": "ACTÚA COMO: Email Marketing Specialist. Escribe asuntos (Subject Lines) imposibles de ignorar. El cuerpo del correo debe ser conversacional, corto y con un solo objetivo (clic)."
         },
-        "Crear una App Móvil": {
-            "tipo": "texto", "icon": "📲",
-            "desc": "Ayuda con Flutter, React Native o Swift.",
-            "prompt": "ACTÚA COMO: Desarrollador de Apps Móviles Experto. Ayuda a planificar la arquitectura y escribe código para interfaces de usuario modernas."
+        "Planificador de Contenidos (Calendario)": {
+            "icon": "🗓️", "desc": "Organiza qué publicar durante todo el mes.",
+            "prompt": "ACTÚA COMO: Content Manager. Crea tablas de calendarios editoriales. Incluye: Día, Temática, Formato (Video/Foto/Carrusel), Idea clave y Objetivo."
         },
-        "Arreglar mi Código (Debug)": {
-            "tipo": "texto", "icon": "🔧",
-            "desc": "Pégame tu código roto y yo encuentro el error.",
-            "prompt": "ACTÚA COMO: Senior Software Engineer. Analiza el código del usuario, encuentra el error, explícalo y escribe la versión corregida."
+        "Experto SEO (Blogs y Google)": {
+            "icon": "🔎", "desc": "Artículos optimizados para salir primero en Google.",
+            "prompt": "ACTÚA COMO: Redactor SEO Senior. Escribe artículos estructurados con H1, H2, H3. Integra palabras clave (keywords) de forma natural. Prioriza la intención de búsqueda del usuario."
         },
-        "Ayuda con Excel y Fórmulas": {
-            "tipo": "texto", "icon": "📊",
-            "desc": "Crea fórmulas complejas, macros o análisis de datos.",
-            "prompt": "ACTÚA COMO: Experto en Microsoft Excel y Data Analysis. Escribe fórmulas complejas, macros en VBA o scripts de Google Sheets. Explica paso a paso."
+        "Creador de Nombres (Naming) y Slogans": {
+            "icon": "💡", "desc": "Ideas creativas para marcas, productos o dominios.",
+            "prompt": "ACTÚA COMO: Consultor de Branding Creativo. Genera listas de nombres cortos, memorables y disponibles. Explica el racional detrás de cada nombre."
         },
 
-        # --- ESCRITURA Y TRABAJO (TEXTO) ---
-        "Redactar Correo Profesional": {
-            "tipo": "texto", "icon": "📧",
-            "desc": "Escribe emails formales, de ventas o solicitudes.",
-            "prompt": "ACTÚA COMO: Experto en Comunicación Corporativa. Redacta correos electrónicos formales, persuasivos y sin faltas de ortografía. Ajusta el tono según el destinatario."
+        # --- CREATIVIDAD VISUAL ---
+        "Diseñador de Logos": {
+            "icon": "🎨", "desc": "Crea conceptos de logotipos únicos.",
+            "prompt": "Diseño de logotipo vectorial, minimalista, fondo plano, alta calidad, estilo moderno, simétrico."
         },
-        "Mejorar mi CV / Hoja de Vida": {
-            "tipo": "texto", "icon": "📄",
-            "desc": "Optimiza tu currículum para conseguir empleo.",
-            "prompt": "ACTÚA COMO: Reclutador de Recursos Humanos (HR). Analiza el perfil del usuario, mejora la redacción, destaca logros y usa palabras clave para pasar filtros ATS."
+        "Generador de Imágenes Realistas": {
+            "icon": "🖼️", "desc": "Fotos que parecen reales (Midjourney Style).",
+            "prompt": "Fotografía hiperrealista, 8k, iluminación cinemática, lente de 85mm, alta definición, texturas detalladas."
         },
-        "Crear Post para Redes Sociales": {
-            "tipo": "texto", "icon": "🚀",
-            "desc": "Ideas y textos virales para Instagram, LinkedIn o TikTok.",
-            "prompt": "ACTÚA COMO: Community Manager experto. Crea calendarios de contenido, escribe captions con ganchos (hooks) atractivos y sugiere hashtags relevantes."
+        "Ilustrador Estilo Anime/Manga": {
+            "icon": "⛩️", "desc": "Personajes y escenas estilo japonés.",
+            "prompt": "Ilustración estilo anime de alta calidad, estudio Ghibli o Makoto Shinkai, colores vibrantes, líneas limpias."
         },
-        "Traducir Texto": {
-            "tipo": "texto", "icon": "🌍",
-            "desc": "Traducción perfecta a cualquier idioma.",
-            "prompt": "ACTÚA COMO: Traductor Jurado Profesional. Traduce el texto manteniendo el tono, la intención y los matices culturales. No traduzcas literalmente, interpreta."
+        "Diseño de Interiores y Arquitectura": {
+            "icon": "🏠", "desc": "Visualiza habitaciones, casas y decoraciones.",
+            "prompt": "Fotografía de arquitectura y diseño de interiores, revista Architectural Digest, iluminación natural, muebles modernos, render fotorrealista."
         },
 
-        # --- VIDA DIARIA Y OTROS (TEXTO) ---
-        "Asistente General (Chat Normal)": {
-            "tipo": "texto", "icon": "🤖",
-            "desc": "Pregúntame lo que quieras, soy ChatGPT.",
-            "prompt": "Eres un asistente de inteligencia artificial útil, amable y eficiente. Responde de manera clara y concisa."
+        # --- PROGRAMACIÓN Y WEB ---
+        "Crear Página Web (HTML/CSS)": {
+            "icon": "💻", "desc": "Código listo para copiar y pegar.",
+            "prompt": "ACTÚA COMO: Desarrollador Web Senior. Escribe código HTML5, CSS3 y JS moderno. Entrega los archivos separados. Asegura que sea 'Responsive' (adaptable a móvil)."
+        },
+        "Experto en Python y Datos": {
+            "icon": "🐍", "desc": "Scripts, análisis de datos y automatización.",
+            "prompt": "ACTÚA COMO: Python Developer Expert. Escribe scripts eficientes, con manejo de errores y comentarios explicativos. Si es análisis de datos, sugiere usar Pandas."
+        },
+        "Solucionar Errores de Código (Debug)": {
+            "icon": "🔧", "desc": "Encuentra por qué falla tu programa.",
+            "prompt": "ACTÚA COMO: Tech Lead. Analiza el código proporcionado, detecta el error lógico o de sintaxis, explica por qué falla y entrégame la solución corregida."
+        },
+
+        # --- NEGOCIOS Y TRABAJO ---
+        "Mejorar Currículum (CV)": {
+            "icon": "📄", "desc": "Optimiza tu perfil para conseguir entrevistas.",
+            "prompt": "ACTÚA COMO: Reclutador experto (Headhunter). Reescribe la experiencia para que suene orientada a logros y resultados numéricos. Usa palabras clave de la industria."
+        },
+        "Redactar Correos Formales": {
+            "icon": "✉️", "desc": "Comunicaciones serias para empresas.",
+            "prompt": "ACTÚA COMO: Experto en Comunicación Corporativa. Redacta emails claros, formales y persuasivos. Mantén un tono profesional y educado."
+        },
+        "Asesor Legal (Contratos)": {
+            "icon": "⚖️", "desc": "Revisión y explicación de documentos legales.",
+            "prompt": "ACTÚA COMO: Abogado Consultor. Explica cláusulas complejas en lenguaje sencillo. (Aclara siempre que esto es información, no consejo legal vinculante)."
+        },
+
+        # --- VIDA DIARIA ---
+        "Chef y Recetas": {
+            "icon": "🍳", "desc": "Ideas de cocina con lo que tengas en la heladera.",
+            "prompt": "ACTÚA COMO: Chef Profesional. Dame recetas paso a paso, tiempos de cocción exactos y trucos para mejorar el sabor."
         },
         "Profesor de Inglés": {
-            "tipo": "texto", "icon": "🎓",
-            "desc": "Practica conversación o pide explicaciones gramaticales.",
-            "prompt": "ACTÚA COMO: Profesor nativo de inglés (ESL Teacher). Corrige los errores del usuario amablemente, explica la gramática y propón ejercicios."
+            "icon": "🎓", "desc": "Corrige textos o practica conversación.",
+            "prompt": "ACTÚA COMO: Profesor nativo de inglés. Corrige mis errores gramaticales, explícame por qué está mal y dame la versión natural."
         },
-        "Chef / Recetas de Cocina": {
-            "tipo": "texto", "icon": "🍳",
-            "desc": "Dime qué ingredientes tienes y te doy una receta.",
-            "prompt": "ACTÚA COMO: Chef Estrella Michelin. Sugiere recetas deliciosas, explica las técnicas de cocción y ofrece alternativas si faltan ingredientes."
-        },
-        "Entrenador Personal / Gym": {
-            "tipo": "texto", "icon": "💪",
-            "desc": "Planes de ejercicio y consejos de nutrición.",
-            "prompt": "ACTÚA COMO: Entrenador Personal certificado. Crea rutinas de ejercicios seguras y efectivas. Da consejos generales de nutrición (con disclaimer médico)."
-        },
-        "Asesor Legal / Abogado": {
-            "tipo": "texto", "icon": "⚖️",
-            "desc": "Ayuda con contratos y dudas legales generales.",
-            "prompt": "ACTÚA COMO: Abogado consultor. Explica términos legales complejos en lenguaje sencillo. Revisa contratos. IMPORTANTE: Siempre aclara que esto no es un consejo legal vinculante."
+        "Asistente General (IA)": {
+            "icon": "🤖", "desc": "Charla libre sobre cualquier tema.",
+            "prompt": "Eres un asistente de inteligencia artificial útil, amable y eficiente."
         }
     }
