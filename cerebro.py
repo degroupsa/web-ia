@@ -3,17 +3,33 @@ from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 
-# --- CONFIGURACIÓN DE SECRETOS ---
+# --- CONFIGURACIÓN ---
 try:
-    # Forzamos conversión a string para evitar errores de tipo
     OPENAI_KEY = str(st.secrets["OPENAI_KEY"])
     TAVILY_KEY = str(st.secrets["TAVILY_KEY"])
 except:
-    st.error("⚠️ Faltan las claves en los Secretos.")
+    st.error("⚠️ Faltan secretos.")
     st.stop()
 
 def obtener_cliente():
     return OpenAI(api_key=OPENAI_KEY)
+
+# --- NUEVO: GENERADOR DE TÍTULOS INTELIGENTES ---
+def generar_titulo_corto(primer_mensaje):
+    """Crea un título resumen de 3 a 5 palabras basado en el mensaje"""
+    client = obtener_cliente()
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Eres un experto en resumir. Genera un TÍTULO de máximo 5 palabras que resuma el siguiente mensaje del usuario. Solo devuelve el título, sin comillas ni puntos."},
+                {"role": "user", "content": primer_mensaje}
+            ],
+            max_tokens=15
+        )
+        return res.choices[0].message.content.strip()
+    except:
+        return "Nuevo Chat"
 
 # --- GENERAR IMAGEN ---
 def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
@@ -27,72 +43,53 @@ def generar_imagen_dalle(prompt_usuario, prompt_sistema_rol):
     except Exception as e:
         return f"Error generando imagen: {e}"
 
-# --- BUSCAR EN WEB ---
+# --- BUSCAR WEB ---
 def buscar_en_web(consulta):
     try:
         tavily = TavilyClient(api_key=TAVILY_KEY)
         respuesta = tavily.search(query=consulta, search_depth="advanced")
         contexto = []
-        # Validamos que 'results' exista y sea lista
         if 'results' in respuesta and isinstance(respuesta['results'], list):
             for resultado in respuesta['results'][:3]:
-                contexto.append(f"- {resultado.get('title', 'Sin titulo')}: {resultado.get('content', '')}")
+                contexto.append(f"- {resultado.get('title', 'Web')}: {resultado.get('content', '')}")
             return "\n".join(contexto)
-        return "Sin resultados relevantes."
+        return "Sin resultados."
     except:
-        return "No se pudo conectar a internet."
+        return "Error de conexión."
 
-# --- CEREBRO DE TEXTO (BLINDADO) ---
+# --- CEREBRO TEXTO ---
 def respuesta_inteligente(mensaje_usuario, historial, prompt_rol, usar_internet):
     client = obtener_cliente()
     ahora = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # 1. Limpieza de historial (Anti-Error TypeError)
+    # Limpieza de datos (Anti-Crash)
     historial_limpio = []
     for msg in historial:
-        if msg.get("content"): # Solo si tiene contenido
-            historial_limpio.append({
-                "role": str(msg["role"]), 
-                "content": str(msg["content"]) # Forzamos string
-            })
+        if msg.get("content"):
+            historial_limpio.append({"role": str(msg["role"]), "content": str(msg["content"])})
 
-    # 2. Construcción del Sistema
     sistema = [{"role": "system", "content": f"{prompt_rol}. FECHA: {ahora}"}]
     
     if usar_internet:
         info = buscar_en_web(mensaje_usuario)
         sistema.append({"role": "system", "content": f"DATOS WEB: {info}"})
         
-    # 3. Ensamblaje final
     msgs = sistema + historial_limpio + [{"role": "user", "content": str(mensaje_usuario)}]
     
     try:
         res = client.chat.completions.create(model="gpt-4o-mini", messages=msgs)
         return res.choices[0].message.content
     except Exception as e:
-        return f"Error en el cerebro IA: {e}"
+        return f"Error IA: {e}"
 
-# --- BASE DE DATOS DE TAREAS (TUS CATEGORÍAS) ---
+# --- TAREAS ---
 def obtener_tareas():
     return {
-        # --- MARKETING ---
-        "Experto en Instagram": {"icon": "📸", "desc": "Estrategias, captions y hashtags.", "prompt": "ACTÚA COMO: Instagram Strategist. Crea captions con hooks virales."},
-        "Guionista de TikTok": {"icon": "🎵", "desc": "Guiones para videos cortos.", "prompt": "ACTÚA COMO: Guionista Viral. Estructura: Gancho, Desarrollo, Twist, CTA."},
-        "Copywriter de Anuncios": {"icon": "📢", "desc": "Textos para Ads que vendan.", "prompt": "ACTÚA COMO: Experto en Paid Media. Usa fórmulas AIDA o PAS."},
-        "Planificador de Contenidos": {"icon": "🗓️", "desc": "Calendarios editoriales.", "prompt": "ACTÚA COMO: Content Manager. Organiza por tablas: Día, Formato, Idea."},
-        
-        # --- NEGOCIOS ---
-        "Asesor de Negocios": {"icon": "💼", "desc": "Estrategia y modelos de negocio.", "prompt": "ACTÚA COMO: Consultor de Negocios Senior. Evalúa riesgos y oportunidades."},
-        "Naming (Crear Nombres)": {"icon": "💡", "desc": "Ideas de nombres para marcas.", "prompt": "ACTÚA COMO: Consultor de Branding. Genera nombres cortos y memorables."},
-        
-        # --- CREATIVIDAD ---
-        "Diseñador de Logos": {"icon": "🎨", "desc": "Conceptos visuales de marcas.", "prompt": "Diseño de logotipo vectorial, minimalista, fondo plano."},
-        "Generador de Imágenes": {"icon": "🖼️", "desc": "Crea cualquier imagen realista.", "prompt": "Fotografía cinemática, alta definición, 8k."},
-        
-        # --- DEV ---
-        "Desarrollador Web": {"icon": "💻", "desc": "HTML, CSS, JS y React.", "prompt": "ACTÚA COMO: Senior Full Stack Developer. Escribe código limpio y modular."},
-        "Experto en Python": {"icon": "🐍", "desc": "Scripts y automatización.", "prompt": "ACTÚA COMO: Python Expert. Escribe scripts eficientes con manejo de errores."},
-        
-        # --- GENERAL ---
-        "Asistente General": {"icon": "🤖", "desc": "Chat libre.", "prompt": "Eres un asistente útil y amable."}
+        "Experto en Instagram": {"icon": "📸", "desc": "Estrategias y captions.", "prompt": "ACTÚA COMO: Instagram Strategist."},
+        "Guionista de TikTok": {"icon": "🎵", "desc": "Guiones virales.", "prompt": "ACTÚA COMO: Guionista Viral."},
+        "Diseñador de Logos": {"icon": "🎨", "desc": "Conceptos visuales.", "prompt": "Diseño de logotipo vectorial, minimalista."},
+        "Desarrollador Web": {"icon": "💻", "desc": "HTML/React Expert.", "prompt": "ACTÚA COMO: Senior Full Stack Developer."},
+        "Asesor de Negocios": {"icon": "💼", "desc": "Estrategia.", "prompt": "ACTÚA COMO: Consultor Senior."},
+        "Asistente General": {"icon": "🤖", "desc": "Chat libre.", "prompt": "Eres un asistente útil."}
+        # ... (Puedes agregar más aquí) ...
     }
