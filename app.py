@@ -65,42 +65,35 @@ def crear_user(u, p):
     db.collection("users").document(u).set({"password": p, "plan": "Gratis"})
     return True
 
-# --- 4. GESTIÓN DE SESIÓN PERSISTENTE (AUTO-LOGIN) ---
+# --- 4. AUTO-LOGIN Y SESIÓN ---
 if "usuario" not in st.session_state: st.session_state.usuario = None
 if "chat_id" not in st.session_state: st.session_state.chat_id = None
 
 def auto_login():
-    """Recupera el usuario de la URL si se recarga la página"""
-    # Verificamos si hay un usuario en los parámetros de la URL
     params = st.query_params
     if "user_token" in params and st.session_state.usuario is None:
         st.session_state.usuario = params["user_token"]
 
 def guardar_sesion_url(usuario):
-    """Guarda el usuario en la URL para que no se pierda al F5"""
     st.query_params["user_token"] = usuario
 
 def cerrar_sesion_url():
-    """Limpia la URL"""
     st.query_params.clear()
     st.session_state.usuario = None
     st.session_state.chat_id = None
     st.rerun()
 
-# Ejecutamos auto-login al iniciar
 auto_login()
 
-# Callback para limpiar chat al cambiar rol
 def al_cambiar_rol():
     st.session_state.chat_id = None
 
 # ==========================================
-# 🎨 BARRA LATERAL (CONTROL TOTAL)
+# 🎨 BARRA LATERAL
 # ==========================================
 st.sidebar.title("🔥 DevMaster AI")
 
 if not st.session_state.usuario:
-    # --- LOGIN EN SIDEBAR ---
     st.info("Inicia sesión para continuar")
     tab1, tab2 = st.sidebar.tabs(["Login", "Registro"])
     with tab1:
@@ -109,7 +102,7 @@ if not st.session_state.usuario:
         if st.button("Entrar"):
             if login(u, p):
                 st.session_state.usuario = u
-                guardar_sesion_url(u) # <--- GUARDAMOS SESIÓN
+                guardar_sesion_url(u)
                 st.rerun()
             else: st.error("Error")
     with tab2:
@@ -120,7 +113,6 @@ if not st.session_state.usuario:
             else: st.error("Existe")
 
 else:
-    # --- USUARIO LOGUEADO ---
     st.sidebar.caption(f"Hola, {st.session_state.usuario}")
     
     if st.sidebar.button("➕ Nuevo Chat", use_container_width=True, type="primary"):
@@ -129,18 +121,15 @@ else:
     
     st.sidebar.divider()
 
-    # 2. PANEL DE CONTROL
+    # PANEL DE CONTROL
     st.sidebar.subheader("🛠️ Panel de Control")
-    
     tareas = cerebro.obtener_tareas()
     lista_tareas = list(tareas.keys())
     
-    # Buscamos el índice del Asistente General para que sea el default
     index_default = 0
     if "Asistente General" in lista_tareas:
         index_default = lista_tareas.index("Asistente General")
 
-    # Selector de Rol (Ya no empieza vacío, empieza en Default)
     tarea_sel = st.sidebar.selectbox(
         "Selecciona Experto:", 
         lista_tareas, 
@@ -154,7 +143,7 @@ else:
 
     st.sidebar.divider()
 
-    # 3. HISTORIAL
+    # HISTORIAL
     st.sidebar.subheader("🗂️ Historial")
     sesiones = obtener_sesiones(st.session_state.usuario)
     for sid, sdata in sesiones:
@@ -165,19 +154,16 @@ else:
 
     st.sidebar.divider()
     if st.sidebar.button("Cerrar Sesión"):
-        cerrar_sesion_url() # <--- LIMPIAMOS SESIÓN
+        cerrar_sesion_url()
 
     # ==========================================
     # 🖥️ ÁREA PRINCIPAL
     # ==========================================
     
-    # Siempre habrá tarea seleccionada porque quitamos el index=None
     if tarea_sel:
         info = tareas[tarea_sel]
         
         st.subheader(f"{info.get('icon', '🤖')} {tarea_sel}")
-        
-        # Avisos de modo
         if img: st.caption("✨ Modo Generación de Imágenes Activado")
         if web: st.caption("🌐 Modo Búsqueda Online Activado")
 
@@ -186,7 +172,6 @@ else:
         if st.session_state.chat_id:
             msgs = cargar_mensajes(st.session_state.usuario, st.session_state.chat_id)
         else:
-            # Mensaje de bienvenida inicial
             st.markdown(f"""
             <div style='background-color: #262730; padding: 15px; border-radius: 10px; margin-bottom: 20px;'>
                 👋 <b>¡Bienvenido!</b> Soy tu experto en <b>{tarea_sel}</b>.<br>
@@ -194,46 +179,48 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-        # Renderizar Chat
+        # RENDERIZAR CHAT (HISTORIAL)
         for m in msgs:
             with st.chat_message(m["role"]):
+                # AQUÍ ESTÁ EL CAMBIO 1: width=350 fijo siempre
                 if m["content"].startswith("http") and " " not in m["content"]:
-                    st.image(m["content"], width=400)
+                    st.image(m["content"], width=350, caption="Imagen guardada (Click derecho para descargar HD)")
                 else:
                     st.markdown(m["content"])
 
-        # INPUT (Ahora garantizado que aparece)
+        # INPUT
         prompt = st.chat_input(f"Escribe a tu {tarea_sel}...")
 
         if prompt:
             es_nuevo = False
-            # 1. Crear Sesión si no existe
             if not st.session_state.chat_id:
                 es_nuevo = True
-                with st.spinner("Iniciando conversación..."):
-                    # Usamos el generador de títulos de cerebro
+                with st.spinner("Iniciando..."):
                     titulo = cerebro.generar_titulo_corto(prompt)
                     st.session_state.chat_id = crear_sesion_con_titulo(st.session_state.usuario, tarea_sel, titulo)
             
-            # 2. Guardar User
+            # Guardar User
             guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
             with st.chat_message("user"): st.markdown(prompt)
             
-            # 3. Procesar IA
-            with st.spinner("Generando respuesta..."):
+            # Procesar IA
+            with st.spinner("Generando..."):
                 res = ""
                 if img:
                     estilo = info.get('image_style', info['prompt'])
                     res = cerebro.generar_imagen_dalle(prompt, estilo)
-                    if "http" in res: st.image(res)
-                    else: st.error(res)
+                    
+                    if "http" in res:
+                        # AQUÍ ESTÁ EL CAMBIO 2: width=350 fijo al generar
+                        st.image(res, width=350, caption="Imagen Generada (Click derecho para descargar HD)")
+                    else: 
+                        st.error(res)
                 else:
                     hist_ia = [m for m in msgs if not m["content"].startswith("http")]
                     res = cerebro.respuesta_inteligente(prompt, hist_ia, info['prompt'], web)
                     st.markdown(res)
             
-            # 4. Guardar IA
+            # Guardar IA
             guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "assistant", res)
             
-            # 5. Recargar para actualizar sidebar (solo si es nuevo)
             if es_nuevo: st.rerun()
