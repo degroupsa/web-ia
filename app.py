@@ -135,37 +135,72 @@ elif menu == "Plataforma AI":
         )
         
         # --- 2. VALIDACIÓN Y FEEDBACK VISUAL ---
-        if tarea_seleccionada:
+if tarea_seleccionada:
             info_tarea = tareas_disponibles[tarea_seleccionada]
-            
-            # EL CARTEL VERDE DE ÉXITO QUE PEDISTE
-            st.success(f"✅ Roles asignados correctamente para: **{tarea_seleccionada}**")
-            
-            # Pequeña descripción visual
-            with st.expander(f"Ver detalles del rol asignado {info_tarea['icon']}"):
-                st.write(info_tarea['desc'])
-                st.caption("Prompt del sistema cargado y optimizado.")
+            tipo_tarea = info_tarea.get("tipo", "texto") # Detectamos si es imagen o texto
 
-            # --- 3. INTERRUPTOR DE INTERNET ---
-            usar_web = st.toggle("🌍 Modo Online (Buscar en Internet)", value=False)
+            st.success(f"✅ Experto asignado: **{tarea_seleccionada}**")
+            with st.expander("Ver credenciales del rol"):
+                st.write(info_tarea['desc'])
+                st.code(info_tarea['prompt']) # Mostramos el prompt para que veas que es "perfecto"
+
+            # INTERRUPTOR SOLO SI ES TEXTO (DALL-E ya tiene internet implícito)
+            usar_web = False
+            if tipo_tarea == "texto":
+                usar_web = st.toggle("🌍 Modo Online", value=False)
             
             st.divider()
 
-            # --- 4. ZONA DE CHAT ---
-            # Cargar Historial
+            # --- MOSTRAR HISTORIAL ---
             mensajes_db = cargar_historial(st.session_state.usuario)
             for msg in mensajes_db:
                 with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
+                    # Si el contenido es una URL de imagen, la mostramos como foto
+                    if msg["content"].startswith("http"):
+                        st.image(msg["content"])
+                    else:
+                        st.markdown(msg["content"])
 
-            # Input Usuario
-            prompt = st.chat_input(f"Dile a tu {tarea_seleccionada} qué hacer...")
+            # --- INPUT USUARIO ---
+            prompt = st.chat_input(f"Pídele algo al {tarea_seleccionada}...")
             
             if prompt:
-                # Mostrar y Guardar User
+                # 1. Guardar mensaje usuario
                 with st.chat_message("user"):
                     st.markdown(prompt)
                 guardar_mensaje_historial(st.session_state.usuario, "user", prompt)
+                
+                # 2. PROCESAMIENTO (LA BIFURCACIÓN MÁGICA)
+                with st.spinner("Trabajando..."):
+                    
+                    # CASO A: GENERAR IMAGEN
+                    if tipo_tarea == "imagen":
+                        resultado = cerebro.generar_imagen_dalle(prompt, info_tarea['prompt'])
+                        
+                        # Si devuelve error (texto), lo mostramos como error
+                        if "Error" in resultado:
+                            st.error(resultado)
+                            texto_guardar = resultado
+                        else:
+                            # Si es URL, mostramos la imagen
+                            st.image(resultado, caption="Imagen Generada por IA")
+                            texto_guardar = resultado # Guardamos la URL en la base de datos
+                    
+                    # CASO B: GENERAR TEXTO (CHAT NORMAL)
+                    else:
+                        historial_ia = [{"role": m["role"], "content": m["content"]} for m in mensajes_db[-5:] if not m["content"].startswith("http")]
+                        resultado = cerebro.respuesta_inteligente(
+                            mensaje_usuario=prompt,
+                            historial=historial_ia,
+                            prompt_rol=info_tarea['prompt'],
+                            usar_internet=usar_web
+                        )
+                        st.markdown(resultado)
+                        texto_guardar = resultado
+
+                # 3. Guardar respuesta IA
+                # Nota: Si es imagen, guardamos la URL. Si es texto, el texto.
+                guardar_mensaje_historial(st.session_state.usuario, "assistant", texto_guardar)
                 
                 # CEREBRO
                 with st.spinner(f"El experto en {tarea_seleccionada} está trabajando..."):
@@ -200,3 +235,4 @@ elif menu == "Generador Prompts":
         if st.button("Generar"):
             res = cerebro.generar_prompt_experto(idea, tipo)
             st.code(res)
+
