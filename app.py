@@ -2,16 +2,12 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import cerebro
+import base64
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(
-    page_title="DevMaster AI", 
-    layout="wide", 
-    page_icon="🔥",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="DevMaster AI", layout="wide", page_icon="🔥", initial_sidebar_state="expanded")
 
-# --- 2. CONEXIÓN DB (HÍBRIDA) ---
+# --- 2. CONEXIÓN DB ---
 if not firebase_admin._apps:
     try:
         if "firebase" in st.secrets:
@@ -22,31 +18,22 @@ if not firebase_admin._apps:
         else:
             cred = credentials.Certificate("firebase_key.json")
             firebase_admin.initialize_app(cred)
-    except Exception as e:
-        st.error(f"Error Database: {e}")
-        st.stop()
+    except: st.stop()
 
 db = firestore.client()
 
-# --- 3. FUNCIONES DE BASE DE DATOS ---
-def crear_sesion_con_titulo(user, rol_inicial, titulo_inteligente):
-    nueva_sesion_ref = db.collection("users").document(user).collection("sessions").document()
-    nueva_sesion_ref.set({
-        "titulo": titulo_inteligente,
-        "rol": rol_inicial,
-        "creado": firestore.SERVER_TIMESTAMP
-    })
-    return nueva_sesion_ref.id
+# --- 3. FUNCIONES DB ---
+def crear_sesion(user, rol, titulo):
+    ref = db.collection("users").document(user).collection("sessions").document()
+    ref.set({"titulo": titulo, "rol": rol, "creado": firestore.SERVER_TIMESTAMP})
+    return ref.id
 
-def guardar_mensaje(user, session_id, role, content):
-    if session_id:
-        db.collection("users").document(user).collection("sessions").document(session_id).collection("msgs").add({
-            "role": role, "content": content, "fecha": firestore.SERVER_TIMESTAMP
-        })
+def guardar_msg(user, sid, role, content):
+    if sid: db.collection("users").document(user).collection("sessions").document(sid).collection("msgs").add({"role": role, "content": content, "fecha": firestore.SERVER_TIMESTAMP})
 
-def cargar_mensajes(user, session_id):
-    if not session_id: return []
-    ref = db.collection("users").document(user).collection("sessions").document(session_id).collection("msgs")
+def cargar_msgs(user, sid):
+    if not sid: return []
+    ref = db.collection("users").document(user).collection("sessions").document(sid).collection("msgs")
     return [d.to_dict() for d in ref.order_by("fecha").stream()]
 
 def obtener_sesiones(user):
@@ -54,173 +41,157 @@ def obtener_sesiones(user):
     docs = ref.order_by("creado", direction=firestore.Query.DESCENDING).limit(15).stream()
     return [(d.id, d.to_dict()) for d in docs]
 
-# --- LOGIN ---
+# --- 4. LOGIN ---
 def login(u, p):
     doc = db.collection("users").document(u).get()
-    if doc.exists and doc.to_dict()["password"] == p: return True
-    return False
+    return doc.exists and doc.to_dict()["password"] == p
 
 def crear_user(u, p):
     if db.collection("users").document(u).get().exists: return False
     db.collection("users").document(u).set({"password": p, "plan": "Gratis"})
     return True
 
-# --- 4. AUTO-LOGIN Y SESIÓN ---
+# --- INIT STATE ---
 if "usuario" not in st.session_state: st.session_state.usuario = None
 if "chat_id" not in st.session_state: st.session_state.chat_id = None
+if "archivo_cache" not in st.session_state: st.session_state.archivo_cache = None
 
-def auto_login():
-    params = st.query_params
-    if "user_token" in params and st.session_state.usuario is None:
-        st.session_state.usuario = params["user_token"]
+# AUTO-LOGIN
+params = st.query_params
+if "user_token" in params and not st.session_state.usuario: st.session_state.usuario = params["user_token"]
 
-def guardar_sesion_url(usuario):
-    st.query_params["user_token"] = usuario
-
-def cerrar_sesion_url():
-    st.query_params.clear()
-    st.session_state.usuario = None
-    st.session_state.chat_id = None
-    st.rerun()
-
-auto_login()
-
-def al_cambiar_rol():
-    st.session_state.chat_id = None
+def al_cambiar_rol(): st.session_state.chat_id = None; st.session_state.archivo_cache = None
 
 # ==========================================
-# 🎨 BARRA LATERAL
+# 🎨 UI SIDEBAR
 # ==========================================
-st.sidebar.title("🔥 DevMaster AI")
+st.sidebar.title("🔥 DevMaster Ultimate")
 
 if not st.session_state.usuario:
-    st.info("Inicia sesión para continuar")
-    tab1, tab2 = st.sidebar.tabs(["Login", "Registro"])
-    with tab1:
-        u = st.text_input("User")
-        p = st.text_input("Pass", type="password")
-        if st.button("Entrar"):
-            if login(u, p):
-                st.session_state.usuario = u
-                guardar_sesion_url(u)
-                st.rerun()
+    st.info("Acceso Seguro")
+    t1, t2 = st.sidebar.tabs(["Entrar", "Crear"])
+    with t1:
+        u = st.text_input("User"); p = st.text_input("Pass", type="password")
+        if st.button("Ingresar"): 
+            if login(u,p): st.session_state.usuario = u; st.query_params["user_token"]=u; st.rerun()
             else: st.error("Error")
-    with tab2:
-        nu = st.text_input("Nuevo User")
-        np = st.text_input("Nueva Pass", type="password")
-        if st.button("Crear"): 
-            if crear_user(nu, np): st.success("Creado")
+    with t2:
+        nu = st.text_input("New User"); np = st.text_input("New Pass", type="password")
+        if st.button("Registrar"): 
+            if crear_user(nu, np): st.success("Ok")
             else: st.error("Existe")
 
 else:
-    st.sidebar.caption(f"Hola, {st.session_state.usuario}")
-    
-    if st.sidebar.button("➕ Nuevo Chat", use_container_width=True, type="primary"):
-        st.session_state.chat_id = None
-        st.rerun()
+    st.sidebar.caption(f"👤 {st.session_state.usuario}")
+    if st.sidebar.button("➕ Nuevo Chat", type="primary", use_container_width=True):
+        st.session_state.chat_id = None; st.session_state.archivo_cache = None; st.rerun()
     
     st.sidebar.divider()
-
-    # PANEL DE CONTROL
-    st.sidebar.subheader("🛠️ Panel de Control")
+    
+    # --- PANEL DE CONTROL ---
+    st.sidebar.subheader("🛠️ Herramientas")
     tareas = cerebro.obtener_tareas()
-    lista_tareas = list(tareas.keys())
     
-    index_default = 0
-    if "Asistente General" in lista_tareas:
-        index_default = lista_tareas.index("Asistente General")
-
-    tarea_sel = st.sidebar.selectbox(
-        "Selecciona Experto:", 
-        lista_tareas, 
-        index=index_default, 
-        on_change=al_cambiar_rol
-    )
+    # Selector Rol
+    idx = list(tareas.keys()).index("Asistente General (Multimodal)") if "Asistente General (Multimodal)" in tareas else 0
+    tarea_sel = st.sidebar.selectbox("Experto:", list(tareas.keys()), index=idx, on_change=al_cambiar_rol)
     
+    # Opciones
     c1, c2 = st.sidebar.columns(2)
-    with c1: web = st.toggle("🌍 Web", False, help="Buscar en Internet")
-    with c2: img = st.toggle("🎨 Img", False, help="Generar Imagen DALL-E")
-
-    st.sidebar.divider()
-
-    # HISTORIAL
-    st.sidebar.subheader("🗂️ Historial")
-    sesiones = obtener_sesiones(st.session_state.usuario)
-    for sid, sdata in sesiones:
-        tipo_boton = "primary" if sid == st.session_state.chat_id else "secondary"
-        if st.sidebar.button(f"💬 {sdata.get('titulo','Chat')}", key=sid, type=tipo_boton, use_container_width=True):
-            st.session_state.chat_id = sid
-            st.rerun()
-
-    st.sidebar.divider()
-    if st.sidebar.button("Cerrar Sesión"):
-        cerrar_sesion_url()
-
-    # ==========================================
-    # 🖥️ ÁREA PRINCIPAL
-    # ==========================================
+    web = c1.toggle("🌍 Web", False, help="Buscar en internet")
+    img_mode = c2.toggle("🎨 Crear Img", False, help="DALL-E 3")
     
-    if tarea_sel:
-        info = tareas[tarea_sel]
+    # --- ZONA DE CARGA DE ARCHIVOS (NUEVO) ---
+    st.sidebar.divider()
+    st.sidebar.subheader("📂 Subir Archivos")
+    uploaded_file = st.sidebar.file_uploader("Imagen o PDF", type=["png", "jpg", "jpeg", "pdf"], key="file_uploader")
+    
+    # Procesamiento de archivo en tiempo real
+    contexto_archivo = None
+    imagen_para_vision = None
+    
+    if uploaded_file:
+        # Si es PDF
+        if uploaded_file.type == "application/pdf":
+            with st.spinner("📄 Leyendo documento..."):
+                texto_pdf = cerebro.leer_pdf(uploaded_file)
+                contexto_archivo = texto_pdf
+                st.sidebar.success("PDF Cargado en memoria")
         
-        st.subheader(f"{info.get('icon', '🤖')} {tarea_sel}")
-        if img: st.caption("✨ Modo Generación de Imágenes Activado")
-        if web: st.caption("🌐 Modo Búsqueda Online Activado")
-
-        # Cargar Mensajes
-        msgs = []
-        if st.session_state.chat_id:
-            msgs = cargar_mensajes(st.session_state.usuario, st.session_state.chat_id)
+        # Si es Imagen (Para Visión)
         else:
-            st.markdown(f"""
-            <div style='background-color: #262730; padding: 15px; border-radius: 10px; margin-bottom: 20px;'>
-                👋 <b>¡Bienvenido!</b> Soy tu experto en <b>{tarea_sel}</b>.<br>
-                {info['desc']}
-            </div>
-            """, unsafe_allow_html=True)
+            st.sidebar.image(uploaded_file, caption="Imagen lista para análisis", use_container_width=True)
+            # Convertir a Base64 para enviar a GPT-4o
+            bytes_data = uploaded_file.getvalue()
+            imagen_para_vision = base64.b64encode(bytes_data).decode('utf-8')
 
-        # RENDERIZAR CHAT (HISTORIAL)
-        for m in msgs:
-            with st.chat_message(m["role"]):
-                # AQUÍ ESTÁ EL CAMBIO 1: width=350 fijo siempre
-                if m["content"].startswith("http") and " " not in m["content"]:
-                    st.image(m["content"], width=350, caption="Imagen guardada (Click derecho para descargar HD)")
-                else:
-                    st.markdown(m["content"])
+    st.sidebar.divider()
+    
+    # Historial
+    st.sidebar.subheader("🗂️ Chats")
+    for sid, dat in obtener_sesiones(st.session_state.usuario):
+        if st.sidebar.button(f"💬 {dat.get('titulo','Chat')}", key=sid, use_container_width=True, type="secondary" if sid != st.session_state.chat_id else "primary"):
+            st.session_state.chat_id = sid; st.rerun()
+            
+    if st.sidebar.button("Cerrar Sesión"):
+        st.query_params.clear(); st.session_state.usuario = None; st.session_state.chat_id = None; st.rerun()
 
-        # INPUT
-        prompt = st.chat_input(f"Escribe a tu {tarea_sel}...")
+    # ==========================================
+    # 🖥️ MAIN CHAT
+    # ==========================================
+    info = tareas[tarea_sel]
+    st.subheader(f"{info.get('icon','🤖')} {tarea_sel}")
+    
+    # Etiquetas de estado
+    status = []
+    if web: status.append("🌐 Online")
+    if img_mode: status.append("🎨 Modo Arte")
+    if contexto_archivo: status.append("📄 Leyendo PDF")
+    if imagen_para_vision: status.append("👁️ Viendo Imagen")
+    if status: st.caption(" | ".join(status))
 
-        if prompt:
-            es_nuevo = False
-            if not st.session_state.chat_id:
-                es_nuevo = True
-                with st.spinner("Iniciando..."):
-                    titulo = cerebro.generar_titulo_corto(prompt)
-                    st.session_state.chat_id = crear_sesion_con_titulo(st.session_state.usuario, tarea_sel, titulo)
+    # Cargar Msgs
+    msgs = cargar_msgs(st.session_state.usuario, st.session_state.chat_id) if st.session_state.chat_id else []
+    
+    if not st.session_state.chat_id and not msgs:
+        st.markdown(f"<div style='background:#262730;padding:15px;border-radius:10px'>👋 <b>Hola!</b> {info['desc']}</div>", unsafe_allow_html=True)
+
+    for m in msgs:
+        with st.chat_message(m["role"]):
+            if m["content"].startswith("http") and " " not in m["content"]: st.image(m["content"], width=350)
+            else: st.markdown(m["content"])
+
+    # INPUT
+    prompt = st.chat_input("Escribe tu mensaje...")
+    
+    if prompt:
+        nuevo = False
+        if not st.session_state.chat_id:
+            nuevo = True
+            st.session_state.chat_id = crear_sesion(st.session_state.usuario, tarea_sel, cerebro.generar_titulo_corto(prompt))
+        
+        guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
+        with st.chat_message("user"): st.markdown(prompt)
+        
+        with st.spinner("Procesando..."):
+            res = ""
             
-            # Guardar User
-            guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
-            with st.chat_message("user"): st.markdown(prompt)
+            # --- RUTA 1: CREAR IMAGEN (DALL-E) ---
+            if img_mode:
+                res = cerebro.generar_imagen_dalle(prompt, info['image_style'])
+                if "http" in res: st.image(res, width=350)
+                else: st.error(res)
             
-            # Procesar IA
-            with st.spinner("Generando..."):
-                res = ""
-                if img:
-                    estilo = info.get('image_style', info['prompt'])
-                    res = cerebro.generar_imagen_dalle(prompt, estilo)
-                    
-                    if "http" in res:
-                        # AQUÍ ESTÁ EL CAMBIO 2: width=350 fijo al generar
-                        st.image(res, width=350, caption="Imagen Generada (Click derecho para descargar HD)")
-                    else: 
-                        st.error(res)
-                else:
-                    hist_ia = [m for m in msgs if not m["content"].startswith("http")]
-                    res = cerebro.respuesta_inteligente(prompt, hist_ia, info['prompt'], web)
-                    st.markdown(res)
-            
-            # Guardar IA
-            guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "assistant", res)
-            
-            if es_nuevo: st.rerun()
+            # --- RUTA 2: VISIÓN (ANALIZAR IMAGEN SUBIDA) ---
+            elif imagen_para_vision:
+                res = cerebro.analizar_imagen_vision(prompt, imagen_para_vision, info['prompt'])
+                st.markdown(res)
+                
+            # --- RUTA 3: TEXTO / PDF / WEB ---
+            else:
+                hist = [m for m in msgs if not m["content"].startswith("http")]
+                res = cerebro.respuesta_inteligente(prompt, hist, info['prompt'], web, contexto_archivo)
+                st.markdown(res)
+        
+        guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", res)
+        if nuevo: st.rerun()
