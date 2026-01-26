@@ -62,7 +62,7 @@ if "user_token" in params and not st.session_state.usuario: st.session_state.usu
 def al_cambiar_rol(): st.session_state.chat_id = None
 
 # ==========================================
-# 🎨 SIDEBAR COMPLETO
+# 🎨 SIDEBAR (AHORA MÁS LIMPIO)
 # ==========================================
 st.sidebar.title("🔥 DevMaster AI")
 
@@ -87,7 +87,7 @@ else:
     
     st.sidebar.divider()
     
-    # --- HERRAMIENTAS ---
+    # --- PANEL DE CONTROL ---
     st.sidebar.subheader("🛠️ Panel de Control")
     tareas = cerebro.obtener_tareas()
     
@@ -95,27 +95,12 @@ else:
     idx = list(tareas.keys()).index("Asistente General") if "Asistente General" in tareas else 0
     tarea_sel = st.sidebar.selectbox("Experto:", list(tareas.keys()), index=idx, on_change=al_cambiar_rol)
     
-    # Opciones
+    # Opciones (Limpias)
     c1, c2 = st.sidebar.columns(2)
     web = c1.toggle("🌍 Web", False, help="Buscar en internet")
     img_mode = c2.toggle("🎨 Crear Img", False, help="DALL-E 3")
     
-    # --- SUBIDA DE ARCHIVOS ---
-    st.sidebar.divider()
-    st.sidebar.subheader("📂 Subir (PDF/Img)")
-    uploaded_file = st.sidebar.file_uploader("Arrastra aquí", type=["png", "jpg", "jpeg", "pdf"], key="uploader")
-    
-    contexto_archivo = None
-    imagen_vision = None
-    
-    if uploaded_file:
-        if uploaded_file.type == "application/pdf":
-            with st.spinner("📄 Leyendo PDF..."):
-                contexto_archivo = cerebro.leer_pdf(uploaded_file)
-                st.sidebar.success("PDF Leído")
-        else:
-            st.sidebar.image(uploaded_file, caption="Imagen cargada", use_container_width=True)
-            imagen_vision = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+    # ¡YA NO HAY UPLOADER AQUÍ! EL SIDEBAR QUEDA LIMPIO.
 
     st.sidebar.divider()
     
@@ -135,24 +120,45 @@ else:
     info = tareas[tarea_sel]
     st.subheader(f"{info.get('icon','🤖')} {tarea_sel}")
     
-    # Estado
+    # Variables de archivo (Se llenarán abajo)
+    contexto_archivo = None
+    imagen_vision = None
+    
+    # Etiquetas de estado
     status = []
     if web: status.append("🌐 Online")
     if img_mode: status.append("🎨 Modo Arte")
-    if contexto_archivo: status.append("📄 PDF Activo")
-    if imagen_vision: status.append("👁️ Visión Activa")
-    if status: st.caption(" | ".join(status))
-
-    # Cargar Mensajes
+    
+    # Cargar Msgs
     msgs = cargar_msgs(st.session_state.usuario, st.session_state.chat_id) if st.session_state.chat_id else []
     
     if not st.session_state.chat_id and not msgs:
          st.markdown(f"<div style='background:#262730;padding:15px;border-radius:10px'>👋 <b>Hola!</b> {info['desc']}</div>", unsafe_allow_html=True)
 
+    # Renderizar Chat
     for m in msgs:
         with st.chat_message(m["role"]):
             if m["content"].startswith("http") and " " not in m["content"]: st.image(m["content"], width=350)
             else: st.markdown(m["content"])
+
+    # --- 📎 ZONA DE ADJUNTOS (JUSTO ENCIMA DEL CHAT) ---
+    # Usamos un expander para simular el botón de "Clip"
+    with st.expander("📎 Adjuntar archivo (Imagen o PDF) para este mensaje", expanded=False):
+        uploaded_file = st.file_uploader("Selecciona archivo", type=["png", "jpg", "jpeg", "pdf"], key="main_uploader", label_visibility="collapsed")
+        
+        if uploaded_file:
+            if uploaded_file.type == "application/pdf":
+                with st.spinner("📄 Procesando PDF..."):
+                    contexto_archivo = cerebro.leer_pdf(uploaded_file)
+                    st.success(f"PDF Cargado: {uploaded_file.name}")
+                    status.append("📄 PDF Listo")
+            else:
+                st.image(uploaded_file, width=200, caption="Imagen lista para análisis")
+                imagen_vision = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                status.append("👁️ Imagen Lista")
+
+    # Mostrar estado actualizado con archivos
+    if status: st.caption(" | ".join(status))
 
     # INPUT
     prompt = st.chat_input("Escribe tu mensaje...")
@@ -175,7 +181,7 @@ else:
                 if "http" in res: st.image(res, width=350)
                 else: st.error(res)
             
-            # 2. RUTA VISIÓN (Si subió foto)
+            # 2. RUTA VISIÓN (Si hay imagen adjunta)
             elif imagen_vision:
                 res = cerebro.analizar_imagen_vision(prompt, imagen_vision, info['prompt'])
                 st.markdown(res)
