@@ -28,29 +28,17 @@ def generar_titulo_corto(primer_mensaje):
         return res.choices[0].message.content.strip()
     except: return "Nuevo Chat"
 
-# --- GENERAR IMAGEN (AHORA CON "MAGIA" DE ESTILO) ---
+# --- GENERAR IMAGEN ---
 def generar_imagen_dalle(prompt_usuario, estilo_experto):
     client = obtener_cliente()
-    
-    # AQUÍ ESTÁ EL SECRETO: 
-    # No le pasamos solo lo que pide el usuario.
-    # Le inyectamos una "Dirección de Arte" profesional oculta.
     prompt_final = f"""
     DIRECTIVAS DE ARTE OBLIGATORIAS: {estilo_experto}
-    
     OBJETO A DIBUJAR: {prompt_usuario}
-    
     IMPORTANTE: Asegura alta fidelidad, coherencia visual y acabado profesional.
     """
-    
     try:
         response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt_final,
-            size="1024x1024",
-            quality="hd", # Calidad HD para mejores detalles
-            n=1,
-            style="vivid" # Colores más intensos
+            model="dall-e-3", prompt=prompt_final, size="1024x1024", quality="hd", n=1, style="vivid"
         )
         return response.data[0].url
     except Exception as e:
@@ -86,81 +74,80 @@ def respuesta_inteligente(mensaje, historial, prompt_rol, usar_web):
         return res.choices[0].message.content
     except Exception as e: return f"Error: {e}"
 
-# --- BASE DE DATOS DE ROLES (VERSIÓN PRO) ---
-# Aquí definimos la "Personalidad" (texto) y el "Estilo Visual" (imagen) por separado.
+# --- BASE DE DATOS DE ROLES (CORREGIDA Y COMPLETA) ---
 def obtener_tareas():
     return {
         # --- DISEÑO GRÁFICO ---
         "Diseñador de Logos Pro": {
-            "prompt": """ACTÚA COMO: Diseñador de Identidad Visual Senior (Estilo Paul Rand/Saul Bass).
-            TU OBJETIVO: Crear conceptos de marca atemporales, escalables y memorables.
+            "icon": "🎨",
+            "desc": "Crea conceptos de marca atemporales estilo Paul Rand.",
+            "prompt": """ACTÚA COMO: Diseñador de Identidad Visual Senior.
             METODOLOGÍA:
-            1. Pregunta sobre los valores de la marca y el público objetivo.
-            2. Explica la psicología del color y la tipografía elegida.
-            3. Si piden ideas, describe 3 conceptos abstractos y minimalistas.""",
-            
+            1. Pregunta sobre los valores de la marca.
+            2. Explica la psicología del color.
+            3. Describe 3 conceptos minimalistas.""",
             "image_style": """ESTILO DE LOGOTIPO VECTORIAL PROFESIONAL.
-            Estilo: Minimalismo Plano (Flat Design), Geometría Sagrada, Vector de Adobe Illustrator.
-            Fondo: Blanco sólido puro o Negro sólido puro (sin sombras ni ruido).
-            Características: Líneas limpias, uso del espacio negativo, simetría perfecta, sin texto complejo, colores sólidos (CMYK).
-            NO HAGAS: Renders 3D, sombras realistas, texturas sucias, dibujos a mano alzada."""
+            Estilo: Minimalismo Plano (Flat Design), Geometría Sagrada.
+            Fondo: Blanco sólido puro.
+            Características: Líneas limpias, espacio negativo, simetría perfecta."""
         },
         
         "Generador de Imágenes Hiperrealistas": {
-            "prompt": "Eres un Fotógrafo Profesional de National Geographic. Describes escenas con vocabulario técnico (apertura, ISO, lentes).",
+            "icon": "📸",
+            "desc": "Fotografía estilo National Geographic y Cine.",
+            "prompt": "Eres un Fotógrafo Profesional. Describes escenas con vocabulario técnico (apertura, ISO, lentes).",
             "image_style": """FOTOGRAFÍA HIPERREALISTA PREMIADA.
             Cámara: Sony A7R IV, Lente 85mm f/1.2.
-            Iluminación: Cinematográfica, Volumétrica, Hora dorada o Studio Softbox.
-            Motor: Unreal Engine 5 render, Octane Render, 8k resolution.
-            Detalles: Texturas de piel reales, imperfecciones naturales, profundidad de campo (bokeh)."""
+            Iluminación: Cinematográfica, Volumétrica.
+            Motor: Unreal Engine 5 render, 8k resolution."""
         },
         
         "Ilustrador de Cómics / Anime": {
-            "prompt": "Eres un Mangaka experto (Estilo Shonen Jump). Ayudas a crear personajes, arcos narrativos y settings.",
-            "image_style": """ILUSTRACIÓN ESTILO ANIME DE ALTA GAMA (Production I.G / Studio Ghibli).
+            "icon": "⛩️",
+            "desc": "Estilo Manga Shonen Jump y Studio Ghibli.",
+            "prompt": "Eres un Mangaka experto. Ayudas a crear personajes y arcos narrativos.",
+            "image_style": """ILUSTRACIÓN ESTILO ANIME DE ALTA GAMA.
             Línea: Ink lines definidas y limpias.
-            Colores: Vibrantes, cel-shading moderno, efectos de partículas.
-            Composición: Dinámica, ángulo de cámara dramático.
-            Calidad: Masterpiece, 4k, wallpaper detallado."""
+            Colores: Vibrantes, cel-shading moderno.
+            Composición: Dinámica, ángulo de cámara dramático."""
         },
 
         # --- MARKETING ---
         "Estratega de Instagram & Reels": {
+            "icon": "📱",
+            "desc": "Growth Hacking y contenido viral.",
             "prompt": """ACTÚA COMO: Growth Hacker de Redes Sociales.
-            ESTRUCTURA OBLIGATORIA PARA TEXTOS:
-            1. HOOK (Gancho visual/auditivo en los primeros 3 segundos).
-            2. RETENCIÓN (Historia o dato curioso).
-            3. VALOR (Tip educativo o entretenimiento).
-            4. CTA (Llamada a la acción clara).
-            Usa emojis, saltos de línea y tono conversacional.""",
-            "image_style": """FOTOGRAFÍA LIFESTYLE PARA INSTAGRAM (INFLUENCER).
-            Estilo: Estético, 'Aesthetic', luminoso, tonos pastel o vibrantes según contexto.
-            Formato: Composición centrada, alta calidad, filtro VSCO sutil.
-            Objetivo: Generar likes y guardados."""
+            ESTRUCTURA OBLIGATORIA: 1. HOOK, 2. RETENCIÓN, 3. VALOR, 4. CTA.""",
+            "image_style": """FOTOGRAFÍA LIFESTYLE PARA INSTAGRAM.
+            Estilo: Estético, 'Aesthetic', luminoso.
+            Formato: Composición centrada, alta calidad."""
         },
 
         # --- PROGRAMACIÓN ---
         "Desarrollador Web Full Stack": {
-            "prompt": """ACTÚA COMO: Senior Software Engineer (Google/Meta Level).
-            REGLAS DE CÓDIGO:
-            1. Código limpio, comentado y modular (Clean Code).
-            2. Usa las últimas versiones (React 18+, Python 3.10+).
-            3. Si hay error, explica la CAUSA RAÍZ, no solo la solución.
-            4. Prioriza seguridad y performance.""",
-            "image_style": """UI/UX DESIGN MOCKUP (Dribbble/Behance).
-            Estilo: Interfaz de usuario moderna, Glassmorphism, Dark Mode o Clean Light.
-            Detalles: Vectores, iconos SVG, layout responsivo, tipografía Sans-Serif moderna (Inter/Roboto)."""
+            "icon": "💻",
+            "desc": "Código limpio en React, Python y Arquitectura.",
+            "prompt": """ACTÚA COMO: Senior Software Engineer.
+            REGLAS: Código limpio, modular y seguro.""",
+            "image_style": """UI/UX DESIGN MOCKUP.
+            Estilo: Interfaz moderna, Glassmorphism, Dark Mode."""
         },
 
         # --- NEGOCIOS ---
-        "Consultor de Negocios y Startups": {
-            "prompt": """ACTÚA COMO: Inversor de Venture Capital (Y Combinator).
-            METODOLOGÍA:
-            1. Sé crítico y directo. Busca fallos en la lógica.
-            2. Céntrate en métricas: CAC, LTV, Churn, ROI.
-            3. Ayuda a refinar el Pitch Deck y la Propuesta de Valor Única.""",
-            "image_style": """FOTOGRAFÍA CORPORATIVA / OFICINA MODERNA.
-            Estilo: Editorial de negocios (Forbes/Bloomberg).
-            Ambiente: Oficina de vidrio, rascacielos, reuniones profesionales, iluminación de estudio, trajes modernos."""
+        "Consultor de Negocios": {
+            "icon": "💼",
+            "desc": "Análisis de Startups y Pitch Decks.",
+            "prompt": """ACTÚA COMO: Inversor de Venture Capital.
+            METODOLOGÍA: Sé crítico, céntrate en métricas (CAC, LTV).""",
+            "image_style": """FOTOGRAFÍA CORPORATIVA MODERNA.
+            Ambiente: Oficina de vidrio, reuniones profesionales, iluminación de estudio."""
+        },
+
+        # --- GENERAL ---
+        "Asistente General": {
+            "icon": "🤖",
+            "desc": "Tu asistente de IA para cualquier consulta.",
+            "prompt": "Eres un asistente de inteligencia artificial útil, amable y eficiente.",
+            "image_style": "Arte digital abstracto y futurista, colores neón, alta tecnología."
         }
     }
