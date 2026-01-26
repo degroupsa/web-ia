@@ -114,59 +114,77 @@ if menu == "Login / Registro":
                 st.error("Ese usuario ya existe.")
 
 # ==========================================
-# 🤖 PLATAFORMA IA (ACTUALIZADA)
+# 🤖 PLATAFORMA IA (REDISEÑADA)
 # ==========================================
 elif menu == "Plataforma AI":
     if not st.session_state.usuario:
         st.warning("🔒 Inicia sesión primero.")
     else:
-        st.subheader(f"Área de Trabajo de {st.session_state.usuario}")
+        # --- 1. EL MEGA BUSCADOR DE TAREAS (HEADER) ---
+        st.subheader(f"Hola, {st.session_state.usuario}. Vamos a trabajar.")
         
-        # 1. Roles
-        roles = cerebro.obtener_roles()
-        rol_sel = st.selectbox("Experto:", list(roles.keys()))
-        info_rol = roles[rol_sel]
+        tareas_disponibles = cerebro.obtener_tareas()
+        lista_nombres_tareas = list(tareas_disponibles.keys())
         
-        # --- NUEVO: INTERRUPTOR DE INTERNET ---
-        col_toggle, col_info = st.columns([1, 3])
-        with col_toggle:
-            usar_web = st.toggle("🌍 Modo Online (Internet)", value=False)
+        # Selectbox con buscador nativo
+        tarea_seleccionada = st.selectbox(
+            "¿Qué necesitas hacer hoy?", 
+            options=lista_nombres_tareas,
+            index=None, # Empieza vacío para obligar a elegir
+            placeholder="Escribe para buscar (ej: web, logo, marketing)..."
+        )
         
-        if usar_web:
-            st.caption("⚡ La IA buscará datos en Google antes de responder.")
-
-        # 2. Historial desde Firebase
-        mensajes_db = cargar_historial(st.session_state.usuario)
-        for msg in mensajes_db:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        # 3. Input
-        prompt = st.chat_input("Consulta a la IA...")
-        
-        if prompt:
-            # A) Guardar User
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            guardar_mensaje_historial(st.session_state.usuario, "user", prompt)
+        # --- 2. VALIDACIÓN Y FEEDBACK VISUAL ---
+        if tarea_seleccionada:
+            info_tarea = tareas_disponibles[tarea_seleccionada]
             
-            # B) LLAMADA INTELIGENTE AL CEREBRO
-            with st.spinner("Procesando..."):
-                # Preparamos el historial para enviarlo (sin el prompt actual aun)
-                historial_para_ia = [{"role": m["role"], "content": m["content"]} for m in mensajes_db[-5:]]
+            # EL CARTEL VERDE DE ÉXITO QUE PEDISTE
+            st.success(f"✅ Roles asignados correctamente para: **{tarea_seleccionada}**")
+            
+            # Pequeña descripción visual
+            with st.expander(f"Ver detalles del rol asignado {info_tarea['icon']}"):
+                st.write(info_tarea['desc'])
+                st.caption("Prompt del sistema cargado y optimizado.")
+
+            # --- 3. INTERRUPTOR DE INTERNET ---
+            usar_web = st.toggle("🌍 Modo Online (Buscar en Internet)", value=False)
+            
+            st.divider()
+
+            # --- 4. ZONA DE CHAT ---
+            # Cargar Historial
+            mensajes_db = cargar_historial(st.session_state.usuario)
+            for msg in mensajes_db:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            # Input Usuario
+            prompt = st.chat_input(f"Dile a tu {tarea_seleccionada} qué hacer...")
+            
+            if prompt:
+                # Mostrar y Guardar User
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                guardar_mensaje_historial(st.session_state.usuario, "user", prompt)
                 
-                # Llamamos a la función nueva de cerebro.py
-                txt_ia = cerebro.respuesta_inteligente(
-                    mensaje_usuario=prompt,
-                    historial_previo=historial_para_ia,
-                    prompt_rol=info_rol['prompt'],
-                    usar_internet=usar_web  # <--- Le pasamos el estado del botón
-                )
-            
-            # C) Guardar IA
-            with st.chat_message("assistant"):
-                st.markdown(txt_ia)
-            guardar_mensaje_historial(st.session_state.usuario, "assistant", txt_ia)
+                # CEREBRO
+                with st.spinner(f"El experto en {tarea_seleccionada} está trabajando..."):
+                    historial_para_ia = [{"role": m["role"], "content": m["content"]} for m in mensajes_db[-5:]]
+                    
+                    txt_ia = cerebro.respuesta_inteligente(
+                        mensaje_usuario=prompt,
+                        historial_previo=historial_para_ia,
+                        prompt_rol=info_tarea['system_prompt'], # <--- AQUÍ PASAMOS EL PROMPT ESPECIALIZADO
+                        usar_internet=usar_web
+                    )
+                
+                # Mostrar y Guardar IA
+                with st.chat_message("assistant"):
+                    st.markdown(txt_ia)
+                guardar_mensaje_historial(st.session_state.usuario, "assistant", txt_ia)
+                
+        else:
+            st.info("👆 Selecciona una tarea en el menú de arriba para activar la Inteligencia Artificial.")
 
 # ==========================================
 # ✨ GENERADOR PROMPTS
