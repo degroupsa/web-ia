@@ -2,7 +2,6 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import cerebro
-import uuid # Para generar IDs únicos de chat
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="DevMaster AI", layout="wide", page_icon="🔥")
@@ -19,29 +18,21 @@ if not firebase_admin._apps:
             cred = credentials.Certificate("firebase_key.json")
             firebase_admin.initialize_app(cred)
     except Exception as e:
-        st.error(f"Error Database: {e}")
+        st.error(f"Error DB: {e}")
         st.stop()
 
 db = firestore.client()
 
-# --- 3. GESTIÓN DE SESIONES (NUEVO) ---
-def crear_sesion(user, rol_inicial, primer_mensaje):
-    """Crea un nuevo documento de sesión y retorna su ID"""
-    titulo = primer_mensaje[:30] + "..." # Título automático
+# --- 3. FUNCIONES DE SESIÓN (LÓGICA NUEVA) ---
+def crear_sesion_con_titulo(user, rol_inicial, titulo_inteligente):
+    """Crea la sesión con el título generado por IA"""
     nueva_sesion_ref = db.collection("users").document(user).collection("sessions").document()
     nueva_sesion_ref.set({
-        "titulo": titulo,
+        "titulo": titulo_inteligente,
         "rol": rol_inicial,
         "creado": firestore.SERVER_TIMESTAMP
     })
     return nueva_sesion_ref.id
-
-def obtener_sesiones(user):
-    """Trae la lista de chats anteriores para el sidebar"""
-    ref = db.collection("users").document(user).collection("sessions")
-    # Ordenamos por creado descendente (el más nuevo arriba)
-    docs = ref.order_by("creado", direction=firestore.Query.DESCENDING).limit(10).stream()
-    return [(d.id, d.to_dict()) for d in docs]
 
 def guardar_mensaje(user, session_id, role, content):
     if session_id:
@@ -49,139 +40,141 @@ def guardar_mensaje(user, session_id, role, content):
             "role": role, "content": content, "fecha": firestore.SERVER_TIMESTAMP
         })
 
-def cargar_mensajes_sesion(user, session_id):
+def cargar_mensajes(user, session_id):
     if not session_id: return []
     ref = db.collection("users").document(user).collection("sessions").document(session_id).collection("msgs")
     return [d.to_dict() for d in ref.order_by("fecha").stream()]
 
-# --- 4. LÓGICA DE LOGIN ---
-def login(user, pwd):
-    doc = db.collection("users").document(user).get()
-    if doc.exists and doc.to_dict()["password"] == pwd: return doc.to_dict()
-    return None
+def obtener_sesiones(user):
+    ref = db.collection("users").document(user).collection("sessions")
+    docs = ref.order_by("creado", direction=firestore.Query.DESCENDING).limit(15).stream()
+    return [(d.id, d.to_dict()) for d in docs]
 
-def crear_usuario(user, pwd):
-    doc = db.collection("users").document(user).get()
-    if doc.exists: return False
-    db.collection("users").document(user).set({"password": pwd, "plan": "Gratis"})
+# --- 4. LOGIN ---
+def login(u, p):
+    doc = db.collection("users").document(u).get()
+    if doc.exists and doc.to_dict()["password"] == p: return True
+    return False
+
+def crear_user(u, p):
+    if db.collection("users").document(u).get().exists: return False
+    db.collection("users").document(u).set({"password": p, "plan": "Gratis"})
     return True
 
 # --- 5. INTERFAZ ---
 if "usuario" not in st.session_state: st.session_state.usuario = None
-if "chat_actual_id" not in st.session_state: st.session_state.chat_actual_id = None
+if "chat_id" not in st.session_state: st.session_state.chat_id = None
 
-# Función para resetear chat al cambiar rol
-def cambio_de_rol():
-    st.session_state.chat_actual_id = None # Esto fuerza un chat nuevo
+# Función para limpiar chat al cambiar rol
+def al_cambiar_rol():
+    st.session_state.chat_id = None
 
-# NAVEGACIÓN
+# SIDEBAR
 st.sidebar.title("🔥 DevMaster AI")
 
 if not st.session_state.usuario:
-    st.header("Bienvenido")
-    tab1, tab2 = st.tabs(["Entrar", "Registrarse"])
+    tab1, tab2 = st.tabs(["Login", "Registro"])
     with tab1:
-        u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
         if st.button("Entrar"):
             if login(u, p):
                 st.session_state.usuario = u
                 st.rerun()
             else: st.error("Error")
     with tab2:
-        nu = st.text_input("User")
-        np = st.text_input("Pass", type="password")
-        if st.button("Crear"):
-            if crear_usuario(nu, np): st.success("Creado")
+        nu = st.text_input("Nuevo User")
+        np = st.text_input("Nueva Pass", type="password")
+        if st.button("Crear"): 
+            if crear_user(nu, np): st.success("Creado")
             else: st.error("Existe")
 
 else:
-    # --- SIDEBAR: HISTORIAL DE CHATS ---
-    st.sidebar.divider()
+    # --- HISTORIAL SIDEBAR ---
     if st.sidebar.button("➕ Nuevo Chat", use_container_width=True):
-        st.session_state.chat_actual_id = None
+        st.session_state.chat_id = None
         st.rerun()
     
-    st.sidebar.subheader("Historial Reciente")
-    sesiones_previas = obtener_sesiones(st.session_state.usuario)
-    
-    for s_id, s_data in sesiones_previas:
-        titulo = s_data.get("titulo", "Chat sin título")
-        # Si hacemos click, cargamos ese chat
-        if st.sidebar.button(f"💬 {titulo}", key=s_id):
-            st.session_state.chat_actual_id = s_id
+    st.sidebar.caption("Historial")
+    sesiones = obtener_sesiones(st.session_state.usuario)
+    for sid, sdata in sesiones:
+        if st.sidebar.button(f"💬 {sdata.get('titulo','Chat')}", key=sid):
+            st.session_state.chat_id = sid
             st.rerun()
-
+            
     st.sidebar.divider()
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("Salir"):
         st.session_state.usuario = None
-        st.session_state.chat_actual_id = None
+        st.session_state.chat_id = None
         st.rerun()
 
-    # --- ÁREA PRINCIPAL ---
+    # --- MAIN AREA ---
     st.subheader(f"Hola, {st.session_state.usuario}")
-
-    # Selector de Tareas
-    tareas = cerebro.obtener_tareas()
     
-    # IMPORTANTE: on_change ejecuta 'cambio_de_rol' si seleccionas algo nuevo
-    tarea_sel = st.selectbox(
-        "Elige un Experto:", 
-        list(tareas.keys()), 
-        index=None, 
-        placeholder="Busca aquí...",
-        on_change=cambio_de_rol 
-    )
+    tareas = cerebro.obtener_tareas()
+    tarea = st.selectbox("Experto:", list(tareas.keys()), index=None, placeholder="Selecciona Rol...", on_change=al_cambiar_rol)
 
-    if tarea_sel:
-        info = tareas[tarea_sel]
+    if tarea:
+        info = tareas[tarea]
         
         # Opciones
         c1, c2 = st.columns(2)
-        with c1: web_on = st.toggle("🌍 Internet", value=False)
-        with c2: img_on = st.toggle("🎨 Imagen", value=False)
+        with c1: web = st.toggle("🌍 Internet", False)
+        with c2: img = st.toggle("🎨 Imagen", False)
         
         st.divider()
 
-        # CARGAR MENSAJES (Si hay chat activo)
-        mensajes_pantalla = []
-        if st.session_state.chat_actual_id:
-            mensajes_pantalla = cargar_mensajes_sesion(st.session_state.usuario, st.session_state.chat_actual_id)
+        # Cargar Mensajes (si existe chat_id)
+        msgs = []
+        if st.session_state.chat_id:
+            msgs = cargar_mensajes(st.session_state.usuario, st.session_state.chat_id)
         else:
-            st.info("💡 Escribe abajo para iniciar un NUEVO chat con este rol.")
+            st.info("👋 Escribe abajo para iniciar una nueva conversación.")
 
-        # Renderizar Chat
-        for m in mensajes_pantalla:
+        # Mostrar Chat
+        for m in msgs:
             with st.chat_message(m["role"]):
                 if m["content"].startswith("http") and " " not in m["content"]:
                     st.image(m["content"], width=300)
                 else:
                     st.markdown(m["content"])
 
-        # INPUT USUARIO
-        prompt = st.chat_input(f"Escribe a tu {tarea_sel}...")
+        # INPUT
+        prompt = st.chat_input(f"Escribe a {tarea}...")
 
         if prompt:
-            # 1. Si es el primer mensaje, CREAMOS LA SESIÓN
-            if not st.session_state.chat_actual_id:
-                st.session_state.chat_actual_id = crear_sesion(st.session_state.usuario, tarea_sel, prompt)
-                st.rerun() # Recargamos para que aparezca el historial creado
-
-            # 2. Guardar User
-            guardar_mensaje(st.session_state.usuario, st.session_state.chat_actual_id, "user", prompt)
-            with st.chat_message("user"): st.markdown(prompt)
-
-            # 3. Generar Respuesta
-            with st.spinner("Pensando..."):
-                res_final = ""
-                if img_on:
-                    res_final = cerebro.generar_imagen_dalle(prompt, info['prompt'])
-                    st.image(res_final) if "http" in res_final else st.error(res_final)
-                else:
-                    # Filtramos historial para la IA
-                    hist_ia = [m for m in mensajes_pantalla if not m["content"].startswith("http")]
-                    res_final = cerebro.respuesta_inteligente(prompt, hist_ia, info['prompt'], web_on)
-                    st.markdown(res_final)
+            # --- 1. GESTIÓN DE SESIÓN (CRÍTICO) ---
+            es_nuevo_chat = False
             
-            # 4. Guardar IA
-            guardar_mensaje(st.session_state.usuario, st.session_state.chat_actual_id, "assistant", res_final)
+            if not st.session_state.chat_id:
+                es_nuevo_chat = True
+                # Generamos Título Inteligente
+                with st.spinner("Creando sala de chat..."):
+                    titulo_ia = cerebro.generar_titulo_corto(prompt)
+                    # Creamos ID pero NO hacemos rerun todavía
+                    st.session_state.chat_id = crear_sesion_con_titulo(st.session_state.usuario, tarea, titulo_ia)
+            
+            # --- 2. GUARDAR Y MOSTRAR USER ---
+            guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
+            with st.chat_message("user"): st.markdown(prompt)
+            
+            # --- 3. GENERAR RESPUESTA IA ---
+            with st.spinner("Pensando..."):
+                res = ""
+                if img:
+                    res = cerebro.generar_imagen_dalle(prompt, info['prompt'])
+                    if "http" in res: st.image(res)
+                    else: st.error(res)
+                else:
+                    # Filtramos historial para contexto IA
+                    hist_ia = [m for m in msgs if not m["content"].startswith("http")]
+                    res = cerebro.respuesta_inteligente(prompt, hist_ia, info['prompt'], web)
+                    st.markdown(res)
+            
+            # --- 4. GUARDAR IA ---
+            guardar_mensaje(st.session_state.usuario, st.session_state.chat_id, "assistant", res)
+            
+            # --- 5. RECARGAR SOLO SI FUE CHAT NUEVO ---
+            # Esto es para que aparezca el botón nuevo en el sidebar
+            if es_nuevo_chat:
+                st.rerun()
