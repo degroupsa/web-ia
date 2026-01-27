@@ -57,7 +57,12 @@ msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
 
 # Si no hay mensajes y no hay ID de chat, es un chat nuevo: mostramos bienvenida
 if not msgs and not st.session_state.chat_id:
-    st.info(f"Hola! 👋 Soy Kortexa, tu asistente de IA. Mi Rol actual es:   {info_rol['desc']}")
+    # MENSAJE DE BIENVENIDA MEJORADO CON INCENTIVO A PREGUNTAR
+    st.info(
+        f"Hola! 👋 Soy Kortexa, tu asistente de IA.\n\n"
+        f"**Mi Rol actual es:** {info_rol['desc']}\n\n"
+        f"💡 *¿Es tu primera vez utilizando IA? Pregúntame: **'Cómo funcionas?'** o **'¿Quién te creó?'** para un tour rápido.*"
+    )
 
 # Renderizamos los mensajes existentes
 ui.render_chat_msgs(msgs)
@@ -83,31 +88,28 @@ if status_indicators:
 prompt = st.chat_input("Escribe tu mensaje aquí..")
 
 if prompt:
-    # --- [OPTIMIZACIÓN DE VELOCIDAD] ---
-    # Mostramos el mensaje del usuario INMEDIATAMENTE, antes de procesar nada.
+    # A) Gestión de Sesión Nueva
+    nuevo_chat = False
+    if not st.session_state.chat_id:
+        nuevo_chat = True
+        # Creamos la sesión en la base de datos y obtenemos el ID
+        st.session_state.chat_id = db.crear_sesion(
+            st.session_state.usuario, 
+            rol_sel, 
+            cerebro.generar_titulo(prompt)
+        )
+    
+    # B) Guardar y Mostrar Mensaje del Usuario
+    # OPTIMIZACIÓN: Mostramos mensaje inmediatamente
+    db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
     with st.chat_message("user"): 
         st.markdown(prompt)
-
-    # Ahora empieza el trabajo pesado "detrás de escena"
+    
+    # C) Lógica del Cerebro (Procesamiento)
     with st.spinner("⏳ Kortexa está trabajando.."):
-        
-        # A) Gestión de Sesión Nueva (Si es necesario)
-        nuevo_chat = False
-        if not st.session_state.chat_id:
-            nuevo_chat = True
-            st.session_state.chat_id = db.crear_sesion(
-                st.session_state.usuario, 
-                rol_sel, 
-                cerebro.generar_titulo(prompt)
-            )
-        
-        # B) Guardar Mensaje del Usuario en BD (Ya se mostró, ahora se guarda)
-        db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
-        
-        # C) Lógica del Cerebro (Procesamiento)
         respuesta = ""
         
-        # 1. Detectar intención de imagen (si el usuario pide "dibuja X")
+        # 1. Detectar intención de imagen
         es_intencion_imagen = cerebro.detectar_intencion_imagen(prompt)
         
         # CASO 1: Generación de Imagen (Manual o Automática)
@@ -131,12 +133,11 @@ if prompt:
             
         # CASO 3: Texto Normal (Chat, Web Search, PDF)
         else:
-            # El cerebro decide si buscar en web (si web_mode es False) o lo fuerza (si es True)
             respuesta = cerebro.procesar_texto(prompt, msgs, info_rol['prompt'], web_mode, ctx_pdf)
             st.markdown(respuesta)
             
-        # D) Guardar Respuesta de la IA
-        db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
+    # D) Guardar Respuesta de la IA
+    db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
     
     # Recargamos la página solo si era un chat nuevo para que actualice la URL y el historial
     if nuevo_chat: 
