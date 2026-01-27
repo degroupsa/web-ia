@@ -2,8 +2,51 @@ import streamlit as st
 from modules import database as db
 from modules import roles
 
+# --- FUNCIÓN NUEVA: ESTILOS CSS PERSONALIZADOS ---
+def cargar_estilos_css():
+    st.markdown("""
+        <style>
+            /* 1. OCULTAR MENÚS DE STREAMLIT (Los círculos blancos y pie de página) */
+            #MainMenu {visibility: hidden;}
+            header {visibility: hidden;}
+            footer {visibility: hidden;}
+            .stDeployButton {display:none;}
+            
+            /* 2. REDUCIR ESPACIO VACÍO BARRA LATERAL (El hueco rojo) */
+            section[data-testid="stSidebar"] > div:first-child {
+                padding-top: 1rem;
+            }
+            
+            /* 3. BORRAR ESPACIO VACÍO ARRIBA DEL CHAT */
+            .block-container {
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
+
+            /* 4. ESTILO DE TARJETAS (Para la bienvenida y alertas) */
+            [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+                border-radius: 10px;
+                border: 1px solid rgba(250, 250, 250, 0.1);
+            }
+            
+            /* 5. BOTONES MÁS BONITOS (Efecto Hover) */
+            button[kind="primary"] {
+                border-radius: 8px;
+                font-weight: bold;
+                transition: all 0.3s ease;
+            }
+            button[kind="primary"]:hover {
+                transform: scale(1.02);
+                box-shadow: 0px 4px 15px rgba(255, 75, 75, 0.4);
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
 # --- FUNCIÓN 1: BARRA LATERAL ---
 def render_sidebar():
+    # INYECTAMOS LOS ESTILOS AL INICIO
+    cargar_estilos_css()
+    
     # Título de la App
     st.sidebar.title("🔗 Kortexa AI")
     
@@ -35,10 +78,10 @@ def render_sidebar():
 
     # --- INTERFAZ DE USUARIO LOGUEADO ---
     else:
-        st.sidebar.caption(f"👤 {st.session_state.usuario}")
+        st.sidebar.caption(f"👤 Conectado como: {st.session_state.usuario}")
         
         # Botón para limpiar el chat actual
-        if st.sidebar.button("Nuevo Chat", type="primary", use_container_width=True):
+        if st.sidebar.button("➕ Nuevo Chat", type="primary", use_container_width=True):
             st.session_state.chat_id = None
             st.rerun()
         
@@ -72,10 +115,9 @@ def render_sidebar():
         with st.sidebar.expander("📎 Herramientas", expanded=False):
             st.caption("Configuración del chat actual:")
             
-            # --- CAMBIO AQUÍ: Eliminamos las columnas para que queden verticales ---
+            # Botones verticales
             web_mode = st.toggle("🌍 Web", value=False, help="Fuerza a la IA a buscar información actualizada en internet.")
             img_mode = st.toggle("🎨 Arte", value=False, help="Activa el modo de generación de imágenes.")
-            # -----------------------------------------------------------------------
             
             st.markdown("### 📂 Subir archivo")
             up_file = st.file_uploader(

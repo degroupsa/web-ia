@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # <--- NUEVO IMPORT PARA EL SCROLL
 from modules import database as db
 from modules import cerebro
 from modules import ui
@@ -145,6 +146,20 @@ if prompt:
                 prompt, msgs, info_rol['prompt'], web_mode, ctx_pdf, rol_sel
             )
             st.markdown(respuesta)
+
+            # --- CORRECCIÓN DE SCROLL (AUTO-ALIGN) ---
+            # Este script busca el último mensaje del chat y lo alinea al inicio (arriba)
+            # para que el usuario no tenga que subir manualmente.
+            js_scroll = """
+            <script>
+                var chat_elements = window.parent.document.querySelectorAll('.stChatMessage');
+                if (chat_elements.length > 0) {
+                    var last_element = chat_elements[chat_elements.length - 1];
+                    last_element.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
+            </script>
+            """
+            components.html(js_scroll, height=0)
             
         # Guardar Respuesta de la IA
         db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
