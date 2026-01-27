@@ -43,7 +43,7 @@ def render_sidebar():
         rol_sel = st.sidebar.selectbox("Experto:", list(tareas.keys()), index=idx, on_change=reset)
         
         c1, c2 = st.sidebar.columns(2)
-        web = c1.toggle("🌍 Web", False)
+        web = c1.toggle("🌍 Web (Auto)", value=False, help="La IA buscará automáticamente si lo necesita. Actívalo para forzar la búsqueda.")
         # NOTA: El toggle de imagen sigue existiendo para forzarlo, 
         # pero ahora tendremos detección automática también.
         img_manual = c2.toggle("🎨 Img", False)
