@@ -2,7 +2,7 @@ import streamlit as st
 from modules import database as db
 from modules import roles
 
-# --- 1. FUNCIÓN DE ESTILOS CSS (DISEÑO & LOGO) ---
+# --- 1. FUNCIÓN DE ESTILOS CSS (DISEÑO) ---
 def cargar_estilos_css():
     st.markdown("""
         <style>
@@ -26,6 +26,7 @@ def cargar_estilos_css():
                 padding: 20px;
                 text-align: center;
                 transition: transform 0.3s ease;
+                height: 100%;
             }
             .feature-card:hover {
                 transform: translateY(-5px);
@@ -42,6 +43,18 @@ def cargar_estilos_css():
             button[kind="primary"]:hover {
                 transform: scale(1.02);
             }
+
+            /* LOGO EN LA BARRA LATERAL */
+            .sidebar-logo {
+                font-family: 'Helvetica Neue', sans-serif;
+                font-weight: 800;
+                font-size: 24px;
+                background: -webkit-linear-gradient(45deg, #FF4B4B, #FF914D);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                text-align: center;
+                margin-bottom: 20px;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -55,47 +68,43 @@ def render_sidebar():
     # ==========================================
     if not st.session_state.usuario:
         
-        # --- ZONA CENTRAL (HERO SECTION) ---
-        # Este SVG es el logo dibujado con código
-        svg_logo = """
-        <svg width="120" height="120" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        # --- ZONA CENTRAL (HERO SECTION CON NUEVO LOGO) ---
+        # Este SVG integra el nombre KORTEXA con un diseño de red neuronal en la 'O' y 'X'
+        svg_logo_hero = """
+        <svg width="100%" height="150" viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg">
             <defs>
-                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <linearGradient id="grad_hero" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" style="stop-color:#FF4B4B;stop-opacity:1" />
                     <stop offset="100%" style="stop-color:#FF914D;stop-opacity:1" />
                 </linearGradient>
             </defs>
-            <path fill="url(#grad1)" d="M50 5 L88 27 V73 L50 95 L12 73 V27 Z M50 20 L75 35 V65 L50 80 L25 65 V35 Z M50 35 L60 41 V59 L50 65 L40 59 V41 Z" opacity="0.9"/>
-            <circle cx="50" cy="50" r="6" fill="#FFFFFF" opacity="0.8"/>
-            <circle cx="50" cy="20" r="3" fill="#FFFFFF" opacity="0.5"/>
-            <circle cx="88" cy="27" r="3" fill="#FFFFFF" opacity="0.5"/>
-            <circle cx="88" cy="73" r="3" fill="#FFFFFF" opacity="0.5"/>
-            <circle cx="50" cy="95" r="3" fill="#FFFFFF" opacity="0.5"/>
-            <circle cx="12" cy="73" r="3" fill="#FFFFFF" opacity="0.5"/>
-            <circle cx="12" cy="27" r="3" fill="#FFFFFF" opacity="0.5"/>
+            <g opacity="0.2" stroke="url(#grad_hero)" stroke-width="1" fill="none">
+                <circle cx="250" cy="75" r="40" />
+                <circle cx="550" cy="75" r="40" />
+                <path d="M250 35 L550 115 M250 115 L550 35 M150 75 L650 75" />
+                <circle cx="150" cy="75" r="5" fill="#FFF" opacity="0.6"/>
+                <circle cx="650" cy="75" r="5" fill="#FFF" opacity="0.6"/>
+                <circle cx="400" cy="75" r="8" fill="#FFF" opacity="0.8"/>
+            </g>
+            <text x="400" y="100" font-family="'Helvetica Neue', sans-serif" font-weight="900" font-size="100" fill="url(#grad_hero)" text-anchor="middle" letter-spacing="-2">KORTEXA AI</text>
         </svg>
         """
 
-        # Renderizamos el contenido central
-        st.markdown(f"""
-            <div style="text-align: center; padding-top: 40px; padding-bottom: 20px;">
-                <div style="margin-bottom: 20px;">
-                    {svg_logo}
+        # Renderizamos el contenido central como un ÚNICO bloque HTML
+        hero_html = f"""
+            <div style="text-align: center; padding-top: 20px; padding-bottom: 30px;">
+                <div style="margin-bottom: 10px;">
+                    {svg_logo_hero}
                 </div>
-                <h1 style="font-size: 55px; font-weight: 800; letter-spacing: -1.5px; margin: 0; 
-                           background: -webkit-linear-gradient(45deg, #FF4B4B, #FF914D); 
-                           -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                    KORTEXA AI
-                </h1>
-                <h3 style="font-weight: 300; opacity: 0.9; font-size: 24px; margin-top: 10px;">
-                    Inteligencia Aumentada para Profesionales
+                <h3 style="font-weight: 300; opacity: 0.9; font-size: 26px; margin-top: 0; font-family: 'Helvetica Neue', sans-serif;">
+                    Tu Segundo Cerebro Digital
                 </h3>
                 <p style="opacity: 0.6; font-size: 16px; max-width: 600px; margin: 20px auto; line-height: 1.6;">
-                    Una suite potente y minimalista diseñada para potenciar tu productividad.
-                    <br>Análisis de documentos • Generación Creativa • Asistencia Experta
+                    Plataforma de inteligencia aumentada para potenciar tu productividad creativa y analítica en un entorno minimalista y seguro.
                 </p>
             </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(hero_html, unsafe_allow_html=True)
         
         # Columnas de características (Value Props)
         st.write("") # Espacio
@@ -103,36 +112,32 @@ def render_sidebar():
         with c1:
             st.markdown("""
                 <div class="feature-card">
-                    <div style="font-size: 30px; margin-bottom: 10px;">🧠</div>
-                    <div style="font-weight: bold; margin-bottom: 5px;">Multimodal</div>
-                    <div style="font-size: 12px; opacity: 0.7;">Procesa texto, imágenes y PDFs en tiempo real.</div>
+                    <div style="font-size: 32px; margin-bottom: 15px;">🧠</div>
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 18px;">IA Multimodal</div>
+                    <div style="font-size: 13px; opacity: 0.7; line-height: 1.4;">Procesamiento avanzado de texto, imágenes y documentos PDF en un solo flujo.</div>
                 </div>
             """, unsafe_allow_html=True)
         with c2:
             st.markdown("""
                 <div class="feature-card">
-                    <div style="font-size: 30px; margin-bottom: 10px;">⚡</div>
-                    <div style="font-weight: bold; margin-bottom: 5px;">Ultra Rápido</div>
-                    <div style="font-size: 12px; opacity: 0.7;">Arquitectura optimizada para respuestas inmediatas.</div>
+                    <div style="font-size: 32px; margin-bottom: 15px;">⚡</div>
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 18px;">Respuesta Instantánea</div>
+                    <div style="font-size: 13px; opacity: 0.7; line-height: 1.4;">Infraestructura optimizada para una interacción fluida y sin latencia.</div>
                 </div>
             """, unsafe_allow_html=True)
         with c3:
             st.markdown("""
                 <div class="feature-card">
-                    <div style="font-size: 30px; margin-bottom: 10px;">🔒</div>
-                    <div style="font-weight: bold; margin-bottom: 5px;">Seguro</div>
-                    <div style="font-size: 12px; opacity: 0.7;">Tus datos y conversaciones están protegidos.</div>
+                    <div style="font-size: 32px; margin-bottom: 15px;">🛡️</div>
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 18px;">Privacidad Total</div>
+                    <div style="font-size: 13px; opacity: 0.7; line-height: 1.4;">Tus datos y conversaciones están encriptados y son solo tuyos.</div>
                 </div>
             """, unsafe_allow_html=True)
 
         # --- BARRA LATERAL (LOGIN) ---
-        st.sidebar.markdown(f"""
-            <div style="text-align: center; margin-bottom: 20px;">
-                {svg_logo.replace('width="120"', 'width="60"').replace('height="120"', 'height="60"')}
-            </div>
-        """, unsafe_allow_html=True)
+        st.sidebar.markdown('<div class="sidebar-logo">🌀 KORTEXA AI</div>', unsafe_allow_html=True)
         
-        st.sidebar.info("👋 Bienvenido. Inicia sesión para acceder.")
+        st.sidebar.info("👋 Bienvenido. Inicia sesión para acceder a tu espacio.")
         
         t1, t2 = st.sidebar.tabs(["Ingresar", "Registrarse"])
         
@@ -140,7 +145,7 @@ def render_sidebar():
             u = st.text_input("Usuario", key="login_user")
             p = st.text_input("Contraseña", type="password", key="login_pass")
             st.write("")
-            if st.button("🚀 Ingresar al Sistema", type="primary", use_container_width=True):
+            if st.button("🚀 Ingresar", type="primary", use_container_width=True):
                 if db.login(u, p): 
                     st.session_state.usuario = u
                     st.query_params["user_token"] = u
@@ -154,7 +159,7 @@ def render_sidebar():
             st.write("")
             if st.button("✨ Crear Cuenta", use_container_width=True):
                 if db.crear_user(nu, np): 
-                    st.success("¡Cuenta creada! Ingresa en la otra pestaña.")
+                    st.success("¡Cuenta creada! Puedes ingresar.")
                 else: 
                     st.error("El usuario ya existe.")
         
@@ -165,7 +170,7 @@ def render_sidebar():
     # CASO B: USUARIO LOGUEADO (APP COMPLETA)
     # ==========================================
     else:
-        st.sidebar.markdown("### 🌀 Kortexa AI")
+        st.sidebar.markdown('<div class="sidebar-logo" style="font-size: 20px; text-align: left;">🌀 KORTEXA AI</div>', unsafe_allow_html=True)
         st.sidebar.caption(f"Sesión activa: {st.session_state.usuario}")
         
         # Botón Nuevo Chat con estilo
@@ -176,7 +181,7 @@ def render_sidebar():
         st.sidebar.divider()
         
         # 1. SELECCIÓN DE ROL
-        st.sidebar.subheader("🧠 Rol del Asistente")
+        st.sidebar.subheader("🧠 Asistente Experto")
         
         tareas = roles.obtener_tareas()
         # Buscar índice por defecto
@@ -197,7 +202,7 @@ def render_sidebar():
         
         # 2. HERRAMIENTAS
         st.sidebar.markdown("---")
-        with st.sidebar.expander("🛠️ Panel de Herramientas", expanded=False):
+        with st.sidebar.expander("🛠️ Herramientas", expanded=False):
             
             c_tog1, c_tog2 = st.columns(2)
             with c_tog1:
