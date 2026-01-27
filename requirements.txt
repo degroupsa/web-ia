@@ -3,3 +3,5 @@ openai
 tavily-python
 pypdf
 watchdog
+firebase-admin
+google-cloud-firestore
