@@ -4,106 +4,82 @@ from modules import cerebro
 from modules import ui
 import base64
 
-# --- 1. CONFIGURACIÓN VISUAL Y NOMBRE (Actualizado a Kortexa) ---
-st.set_page_config(
-    page_title="Kortexa AI",   # <--- NOMBRE ACTUALIZADO
-    layout="wide", 
-    page_icon="🔗",            # <--- ICONO ACTUALIZADO (Coincide con ui.py)
-    initial_sidebar_state="expanded"
-)
+# CONFIGURACIÓN
+st.set_page_config(page_title="Kortexa AI", layout="wide", page_icon="🔗")
 
-# Estado inicial
+# ESTADO
 if "usuario" not in st.session_state: st.session_state.usuario = None
 if "chat_id" not in st.session_state: st.session_state.chat_id = None
-params = st.query_params
-if "user_token" in params and not st.session_state.usuario: st.session_state.usuario = params["user_token"]
+if "user_token" in st.query_params and not st.session_state.usuario: st.session_state.usuario = st.query_params["user_token"]
 
-# 2. RENDERIZAR SIDEBAR
-rol_sel, web_mode, img_mode_manual, tareas_dict = ui.render_sidebar()
+# 1. RENDER SIDEBAR (Recuperamos los controles del sidebar)
+res = ui.render_sidebar()
+if res[0] is None: st.stop()
 
-if not st.session_state.usuario:
-    st.stop()
+rol_sel, web_mode, img_mode_manual, up_file, tareas_dict = res
 
-# 3. CABECERA Y ROL
+# 2. HEADER
 info_rol = tareas_dict[rol_sel]
-st.subheader(f"{info_rol.get('icon','🔗')} {rol_sel}") 
+st.subheader(f"{info_rol.get('icon','🔗')} {rol_sel}")
 
-# Variables para adjuntos
+# 3. PROCESAR ARCHIVOS (Vienen del sidebar)
 ctx_pdf = None
 img_vision = None
 
-# Cargar historial
+if up_file:
+    if up_file.type == "application/pdf":
+        with st.spinner("📄 Procesando PDF..."):
+            ctx_pdf = cerebro.leer_pdf(up_file)
+    else:
+        img_vision = base64.b64encode(up_file.getvalue()).decode('utf-8')
+
+# 4. CHAT HISTORY
 msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
 if not msgs and not st.session_state.chat_id:
-    # <--- SALUDO PERSONALIZADO CON EL NOMBRE NUEVO
-    st.info(f"Hola! 👋 Soy Kortexa, tu asistente IA. Mi Rol actual: {info_rol['desc']}")
+    st.info(f"👋 Soy Kortexa. {info_rol['desc']}")
 
-# Renderizar mensajes anteriores
 ui.render_chat_msgs(msgs)
 
-# --- 4. ZONA DE ADJUNTOS (DISEÑO "CLIP" MODERNO) ---
-col_clip, col_estado = st.columns([1, 15])
+# 5. BARRA DE ESTADO (Feedback visual encima del chat)
+# Esto sirve para que el usuario sepa qué está activado sin mirar el sidebar
+status = []
+if web_mode: status.append("🌍 Internet: ON")
+if img_mode_manual: status.append("🎨 Modo Arte: ON")
+if ctx_pdf: status.append(f"📄 PDF: {up_file.name}")
+if img_vision: status.append(f"👁️ Viendo: {up_file.name}")
 
-with col_clip:
-    # MENÚ FLOTANTE (POPOVER)
-    with st.popover("📎", use_container_width=True, help="Adjuntar archivo"):
-        st.markdown("### 📂 Subir Archivo")
-        up_file = st.file_uploader("Sube un PDF o Imágen", type=["pdf", "png", "jpg", "jpeg"], label_visibility="collapsed")
-        
-        if up_file:
-            if up_file.type == "application/pdf":
-                with st.spinner("📄 Kortexa está leyendo el documento.."):
-                    ctx_pdf = cerebro.leer_pdf(up_file)
-            else:
-                img_vision = base64.b64encode(up_file.getvalue()).decode('utf-8')
+if status:
+    st.caption(" | ".join(status))
 
-# Mostrar aviso si hay algo cargado
-with col_estado:
-    if ctx_pdf:
-        st.success(f"📄 Documento cargado: {up_file.name} (Listo para preguntar)", icon="✅")
-    elif img_vision:
-        st.success(f"🖼️ Imagen cargada: {up_file.name} (Lista para ver)", icon="👁️")
-
-# --- 5. INPUT Y PROCESAMIENTO ---
-prompt = st.chat_input("Escribe tu mensaje aquí..")
+# 6. INPUT
+prompt = st.chat_input("Escribe tu mensaje...")
 
 if prompt:
-    # A) Crear sesión si es chat nuevo
-    nuevo_chat = False
+    # Nuevo Chat
     if not st.session_state.chat_id:
-        nuevo_chat = True
         st.session_state.chat_id = db.crear_sesion(st.session_state.usuario, rol_sel, cerebro.generar_titulo(prompt))
     
-    # B) Guardar y mostrar mensaje usuario
+    # Guardar User
     db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
     with st.chat_message("user"): st.markdown(prompt)
     
-    # C) CEREBRO (KORTEXA THINKING)
-    with st.spinner("⚡ Kortexa está procesando.."): # <--- SPINNER ACTUALIZADO
+    # Cerebro
+    with st.spinner("⚡ Kortexa pensando..."):
         respuesta = ""
+        es_img = cerebro.detectar_intencion_imagen(prompt)
         
-        # 1. ¿Es una petición de imagen?
-        es_intencion_imagen = cerebro.detectar_intencion_imagen(prompt)
-        
-        if img_mode_manual or es_intencion_imagen:
-            if es_intencion_imagen:
-                st.toast("🎨 Generando arte...", icon="🎨")
+        if img_mode_manual or (es_img and not img_mode_manual):
+            if es_img: st.toast("🎨 Generando imagen...")
             respuesta = cerebro.generar_imagen(prompt, info_rol['image_style'])
-            
             if "http" in respuesta: st.image(respuesta, width=350)
             else: st.error(respuesta)
-            
-        # 2. ¿Hay imagen adjunta para ver?
+        
         elif img_vision:
             respuesta = cerebro.analizar_vision(prompt, img_vision, info_rol['prompt'])
             st.markdown(respuesta)
             
-        # 3. Texto normal (con búsqueda automática)
         else:
             respuesta = cerebro.procesar_texto(prompt, msgs, info_rol['prompt'], web_mode, ctx_pdf)
             st.markdown(respuesta)
             
-    # D) Guardar respuesta IA
     db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
-    
-    if nuevo_chat: st.rerun()
