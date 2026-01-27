@@ -35,10 +35,10 @@ def render_sidebar():
 
     # --- INTERFAZ DE USUARIO LOGUEADO ---
     else:
-        st.sidebar.caption(f"👤 Conectado como: {st.session_state.usuario}")
+        st.sidebar.caption(f"👤 {st.session_state.usuario}")
         
         # Botón para limpiar el chat actual
-        if st.sidebar.button("➕ Nuevo Chat", type="primary", use_container_width=True):
+        if st.sidebar.button("Nuevo Chat", type="primary", use_container_width=True):
             st.session_state.chat_id = None
             st.rerun()
         
