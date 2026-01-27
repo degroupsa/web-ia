@@ -83,24 +83,28 @@ if status_indicators:
 prompt = st.chat_input("Escribe tu mensaje aquí..")
 
 if prompt:
-    # A) Gestión de Sesión Nueva
-    nuevo_chat = False
-    if not st.session_state.chat_id:
-        nuevo_chat = True
-        # Creamos la sesión en la base de datos y obtenemos el ID
-        st.session_state.chat_id = db.crear_sesion(
-            st.session_state.usuario, 
-            rol_sel, 
-            cerebro.generar_titulo(prompt)
-        )
-    
-    # B) Guardar y Mostrar Mensaje del Usuario
-    db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
+    # --- [OPTIMIZACIÓN DE VELOCIDAD] ---
+    # Mostramos el mensaje del usuario INMEDIATAMENTE, antes de procesar nada.
     with st.chat_message("user"): 
         st.markdown(prompt)
-    
-    # C) Lógica del Cerebro (Procesamiento)
+
+    # Ahora empieza el trabajo pesado "detrás de escena"
     with st.spinner("⏳ Kortexa está trabajando.."):
+        
+        # A) Gestión de Sesión Nueva (Si es necesario)
+        nuevo_chat = False
+        if not st.session_state.chat_id:
+            nuevo_chat = True
+            st.session_state.chat_id = db.crear_sesion(
+                st.session_state.usuario, 
+                rol_sel, 
+                cerebro.generar_titulo(prompt)
+            )
+        
+        # B) Guardar Mensaje del Usuario en BD (Ya se mostró, ahora se guarda)
+        db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
+        
+        # C) Lógica del Cerebro (Procesamiento)
         respuesta = ""
         
         # 1. Detectar intención de imagen (si el usuario pide "dibuja X")
@@ -131,8 +135,8 @@ if prompt:
             respuesta = cerebro.procesar_texto(prompt, msgs, info_rol['prompt'], web_mode, ctx_pdf)
             st.markdown(respuesta)
             
-    # D) Guardar Respuesta de la IA
-    db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
+        # D) Guardar Respuesta de la IA
+        db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", respuesta)
     
     # Recargamos la página solo si era un chat nuevo para que actualice la URL y el historial
     if nuevo_chat: 
