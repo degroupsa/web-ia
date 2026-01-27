@@ -3,33 +3,45 @@ from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 from pypdf import PdfReader
+from modules import roles  # <--- Importamos roles para la guía dinámica
 
-# --- MANUAL DE USO Y CONCIENCIA (ACTUALIZADO) ---
-GUIA_INTERFAZ = """
-INSTRUCCIONES DE TU PROPIA IDENTIDAD E INTERFAZ (KORTEXA AI):
+# --- MANUAL DE USO DINÁMICO (DETECTIVE DE ROLES) ---
+def obtener_guia_dinamica(rol_actual):
+    """
+    Genera instrucciones dinámicas. Kortexa lee sus propios roles
+    y aprende a recomendar el mejor para la tarea del usuario.
+    """
+    # Obtenemos la lista real de roles disponibles para que la IA los conozca
+    dict_roles = roles.obtener_tareas()
+    nombres_roles = ", ".join(dict_roles.keys())
+    
+    return f"""
+    INSTRUCCIONES DE SISTEMA (KORTEXA AI - DE GROUP):
 
-1. ¿QUIÉN ERES?:
-   - Eres Kortexa AI, un asistente de inteligencia artificial avanzado y modular.
-   - **ORIGEN:** Fuiste desarrollada con orgullo por el equipo de **DE Group**. Naciste con el objetivo de simplificar tareas complejas integrando visión, creatividad y análisis en un solo lugar.
+    1. TU IDENTIDAD:
+       - Eres Kortexa AI, un desarrollo de **DE Group**.
+       - Tu ROL ACTUAL seleccionado por el usuario es: "{rol_actual}".
 
-2. LA BARRA LATERAL (TU PANEL DE CONTROL):
-   Explica estas secciones al usuario si pregunta cómo usarte:
-   
-   A) "🧠 Rol del Asistente" (MUY IMPORTANTE):
-      - Explica que esto NO es solo una etiqueta. Es la configuración de tu cerebro.
-      - **Por qué es vital:** Si el usuario quiere código, debe elegir "Programador". Si quiere un logo, "Diseñador". 
-      - Aconséjale siempre verificar que el rol seleccionado coincida con lo que necesita hacer para obtener el mejor resultado posible.
+    2. TUS MÓDULOS DISPONIBLES:
+       Tienes instalados estos roles en la barra lateral: 
+       [{nombres_roles}]
 
-   B) "📎 Herramientas" (Menú Desplegable):
-      - Interruptor "🌍 Web": Te conecta a internet para datos en tiempo real (noticias, clima, dólar).
-      - Interruptor "🎨 Arte": Te pone en modo "artista" para generar imágenes con DALL-E.
-      - Botón "📂 Subir archivo": Permite que el usuario te envíe documentos (PDF) para leer o imágenes para ver.
+    3. >>> INSTRUCCIÓN DE "DETECTIVE DE ROLES" (PRIORIDAD ALTA):
+       Tu trabajo es asegurarte de que el usuario use el mejor experto para su problema.
+       
+       SI el usuario pide algo complejo (ej: "crear una web", "contrato legal", "logo") 
+       Y tu rol actual NO es el especialista adecuado (ej: estás en "Asistente General"):
+       
+       DEBES iniciar tu respuesta con una sugerencia amigable:
+       "💡 **Sugerencia Kortexa:** Para esta tarea, te recomiendo cambiar al rol **'[Nombre del Rol Ideal]'** en la barra lateral."
+       
+       LUEGO, responde a la pregunta lo mejor que puedas con tu rol actual.
 
-   C) "🗂️ Tus Conversaciones": Tu memoria de chats pasados.
-
-SI EL USUARIO PREGUNTA CÓMO USARTE:
-Sé amable, profesional y usa los nombres exactos de los menús. Menciona a DE Group como tus creadores si preguntan sobre tu origen.
-"""
+    4. SOBRE LA INTERFAZ (Si preguntan "Cómo funcionas"):
+       - Explica que en "🧠 Rol del Asistente" cambian tu personalidad.
+       - En "📎 Herramientas" tienen Web, Arte y Carga de Archivos.
+       - Menciona que eres un desarrollo de DE Group.
+    """
 
 # --- CLIENTE ---
 def obtener_cliente():
@@ -40,23 +52,20 @@ def obtener_cliente():
 # --- 1. ROUTER INTELIGENTE ---
 def decidir_si_buscar(prompt):
     """
-    Usa un modelo rápido (mini) para decidir si la pregunta requiere internet.
+    Decide si la pregunta requiere búsqueda en internet.
     """
     client = obtener_cliente()
     try:
         res = client.chat.completions.create(
-            model="gpt-4o-mini", 
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Eres un clasificador. Responde solo 'SI' si el usuario pregunta sobre: noticias, clima, hora actual, precios, eventos recientes, personas famosas actuales o datos factuales que cambian. Responde 'NO' si es creatividad, resumen, saludo, código o conocimiento general histórico."},
+                {"role": "system", "content": "Responde SI si el usuario pregunta sobre: noticias, clima, hora, precios, eventos recientes. Responde NO si es charla general."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=5,
-            temperature=0
+            max_tokens=5, temperature=0
         )
-        decision = res.choices[0].message.content.strip().upper()
-        return "SI" in decision
-    except:
-        return False 
+        return "SI" in res.choices[0].message.content.strip().upper()
+    except: return False
 
 # --- 2. HERRAMIENTAS ---
 def analizar_vision(msg, b64_img, rol):
@@ -95,34 +104,31 @@ def buscar_web(query):
     except: return "Sin conexión."
 
 # --- 3. PROCESADOR PRINCIPAL ---
-def procesar_texto(msg, hist, rol, web_manual, pdf_ctx):
+def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual):
     client = obtener_cliente()
-    
-    # A) Detectar Hora Exacta
     ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     
-    # B) MODO AUTO-PILOTO
+    # Auto-piloto
     usar_busqueda = web_manual
     debug_msg = ""
-    
-    if not usar_busqueda:
-        if decidir_si_buscar(msg):
-            usar_busqueda = True
-            debug_msg = " [🔎 Auto-Búsqueda Activada]"
+    if not usar_busqueda and decidir_si_buscar(msg):
+        usar_busqueda = True
+        debug_msg = " [🔎 Auto-Web]"
 
-    # C) Construcción del Prompt del Sistema (INCLUIMOS LA GUÍA NUEVA)
-    sys_msg = f"{rol}. FECHA Y HORA ACTUAL: {ahora}. Tu objetivo es ser la IA más precisa y útil del mundo.\n\n{GUIA_INTERFAZ}"
+    # Generamos la guía pasando el rol actual
+    guia_actualizada = obtener_guia_dinamica(nombre_rol_actual)
+
+    # Construcción del Prompt
+    sys_msg = f"{rol_prompt}. FECHA: {ahora}. Objetivo: Ser la mejor IA de DE Group.\n\n{guia_actualizada}"
     
     if pdf_ctx: sys_msg += f"\n\nCONTEXTO PDF:\n{pdf_ctx}"
     
     msgs = [{"role": "system", "content": sys_msg}]
     
-    # D) Inyectar Búsqueda
     if usar_busqueda:
         info = buscar_web(msg)
-        msgs.append({"role": "system", "content": f"DATOS WEB EN TIEMPO REAL (Úsalos si es necesario): {info}"})
+        msgs.append({"role": "system", "content": f"DATOS WEB: {info}"})
     
-    # E) Historial
     hist_clean = [{"role": m["role"], "content": m["content"]} for m in hist if not m["content"].startswith("http")]
     msgs += hist_clean + [{"role": "user", "content": msg}]
     
@@ -136,7 +142,6 @@ def generar_titulo(msg):
         ).choices[0].message.content.strip()
     except: return "Nuevo Chat"
 
-# --- DETECTOR DE INTENCIÓN DE IMAGEN ---
 def detectar_intencion_imagen(prompt):
-    keywords = ["generar imagen", "crear imagen", "dibuja un", "dibújame", "foto de", "imagen de", "ilustración de", "render de"]
+    keywords = ["generar imagen", "crear imagen", "dibuja", "dibújame", "foto de", "imagen de"]
     return any(k in prompt.lower() for k in keywords)
