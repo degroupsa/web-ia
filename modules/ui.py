@@ -2,12 +2,12 @@ import streamlit as st
 from modules import database as db
 from modules import roles
 
+# --- FUNCIÓN 1: BARRA LATERAL ---
 def render_sidebar():
     # Título de la App
     st.sidebar.title("🔗 Kortexa AI")
     
     # --- LOGICA DE LOGIN ---
-    # Si no hay usuario en sesión, mostramos el login y retornamos None para detener la app principal
     if not st.session_state.usuario:
         t1, t2 = st.sidebar.tabs(["Ingresar", "Crear Cuenta"])
         
@@ -20,18 +20,17 @@ def render_sidebar():
                     st.query_params["user_token"] = u
                     st.rerun()
                 else: 
-                    st.error("Error de credenciales o usuario no encontrado.")
+                    st.error("Error de credenciales o usuario no registrado.")
         
         with t2:
-            nu = st.text_input("Nuevo Usuario", key="new_user")
-            np = st.text_input("Nueva Contraseña", type="password", key="new_pass")
+            nu = st.text_input("Crear Usuario", key="new_user")
+            np = st.text_input("Crear Contraseña", type="password", key="new_pass")
             if st.button("Crear Cuenta"):
                 if db.crear_user(nu, np): 
                     st.success("¡Cuenta creada! Por favor ingresa desde la pestaña 'Ingresar'.")
                 else: 
                     st.error("El usuario ya existe.")
         
-        # Retornamos una tupla de Nones para indicar que no hay sesión activa
         return None, None, None, None, None
 
     # --- INTERFAZ DE USUARIO LOGUEADO ---
@@ -46,7 +45,7 @@ def render_sidebar():
         st.sidebar.divider()
         
         # 1. SELECCIÓN DE ROL
-        mensaje_ayuda = "Selecciona el trabajo que quieres realizar y automáticamente se asignarán los roles al chat para un mejor trabajo."
+        mensaje_ayuda = "Selecciona el trabajo que quieres realizar y automáticamente se asignarán los roles necesarios."
         st.sidebar.subheader("🧠 Rol del Asistente", help=mensaje_ayuda)
         
         tareas = roles.obtener_tareas()
@@ -68,31 +67,29 @@ def render_sidebar():
             label_visibility="collapsed"
         )
         
-        # 2. MENÚ DESPLEGABLE DE HERRAMIENTAS (Clean UI)
+        # 2. MENÚ DESPLEGABLE DE HERRAMIENTAS
         st.sidebar.markdown("---")
-        # Usamos un expander para ocultar la complejidad hasta que el usuario la necesite
-        with st.sidebar.expander("📎 Adjuntos y Herramientas", expanded=False):
-            st.caption("Configuración del mensaje actual:")
+        with st.sidebar.expander("📎 Herramientas", expanded=False):
+            st.caption("Configuración del chat actual:")
             
-            # Columnas para los interruptores
-            c1, c2 = st.columns(2)
-            web_mode = c1.toggle("🌍 Web", value=False, help="Fuerza a la IA a buscar información actualizada en internet.")
-            img_mode = c2.toggle("🎨 Arte", value=False, help="Activa el modo de generación de imágenes DALL-E 3.")
+            # --- CAMBIO AQUÍ: Eliminamos las columnas para que queden verticales ---
+            web_mode = st.toggle("🌍 Web", value=False, help="Fuerza a la IA a buscar información actualizada en internet.")
+            img_mode = st.toggle("🎨 Arte", value=False, help="Activa el modo de generación de imágenes.")
+            # -----------------------------------------------------------------------
             
             st.markdown("### 📂 Subir archivo")
             up_file = st.file_uploader(
-                "Sube un PDF o una Imagen", 
+                "Sube un PDF o una Imágen", 
                 type=["pdf", "png", "jpg", "jpeg"], 
                 label_visibility="collapsed"
             )
             
-            # Feedback visual dentro del expander
             if up_file:
                 st.success(f"✅ Archivo listo: {up_file.name}")
         
         # 3. HISTORIAL DE CHATS
         st.sidebar.divider()
-        st.sidebar.subheader("🗂️ Historial")
+        st.sidebar.subheader("🗂️ Tus Conversaciones")
         
         sesiones = db.obtener_sesiones(st.session_state.usuario)
         
@@ -100,10 +97,7 @@ def render_sidebar():
             st.sidebar.info("No hay chats guardados.")
         
         for sid, dat in sesiones:
-            # Estilo del botón según si es el chat activo
             tipo = "primary" if sid == st.session_state.chat_id else "secondary"
-            
-            # Acortar título si es muy largo
             titulo_raw = dat.get('titulo', 'Chat sin título')
             titulo = titulo_raw[:22] + "..." if len(titulo_raw) > 22 else titulo_raw
             
@@ -118,5 +112,15 @@ def render_sidebar():
             st.session_state.chat_id = None
             st.rerun()
             
-        # Retornamos todas las variables necesarias a app.py
         return rol_sel, web_mode, img_mode, up_file, tareas
+
+# --- FUNCIÓN 2: RENDERIZAR MENSAJES ---
+def render_chat_msgs(msgs):
+    if not msgs:
+        return
+    for m in msgs:
+        with st.chat_message(m["role"]):
+            if m["content"].startswith("http") and " " not in m["content"]:
+                st.image(m["content"], width=350)
+            else:
+                st.markdown(m["content"])
