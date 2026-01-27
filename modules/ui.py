@@ -2,34 +2,34 @@ import streamlit as st
 from modules import database as db
 from modules import roles
 
-# --- FUNCIÓN NUEVA: ESTILOS CSS PERSONALIZADOS ---
+# --- FUNCIÓN DE ESTILOS CSS (DISEÑO) ---
 def cargar_estilos_css():
     st.markdown("""
         <style>
-            /* 1. OCULTAR MENÚS DE STREAMLIT (Los círculos blancos y pie de página) */
+            /* 1. OCULTAR MENÚS DE STREAMLIT */
             #MainMenu {visibility: hidden;}
             header {visibility: hidden;}
             footer {visibility: hidden;}
             .stDeployButton {display:none;}
             
-            /* 2. REDUCIR ESPACIO VACÍO BARRA LATERAL (El hueco rojo) */
+            /* 2. AJUSTAR ESPACIOS BARRA LATERAL */
             section[data-testid="stSidebar"] > div:first-child {
                 padding-top: 1rem;
             }
             
-            /* 3. BORRAR ESPACIO VACÍO ARRIBA DEL CHAT */
+            /* 3. AJUSTAR ESPACIOS CHAT */
             .block-container {
                 padding-top: 2rem;
                 padding-bottom: 2rem;
             }
 
-            /* 4. ESTILO DE TARJETAS (Para la bienvenida y alertas) */
+            /* 4. TARJETAS */
             [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
                 border-radius: 10px;
                 border: 1px solid rgba(250, 250, 250, 0.1);
             }
             
-            /* 5. BOTONES MÁS BONITOS (Efecto Hover) */
+            /* 5. BOTONES PERSONALIZADOS */
             button[kind="primary"] {
                 border-radius: 8px;
                 font-weight: bold;
@@ -42,15 +42,14 @@ def cargar_estilos_css():
         </style>
     """, unsafe_allow_html=True)
 
-# --- FUNCIÓN 1: BARRA LATERAL ---
+# --- FUNCIÓN PRINCIPAL BARRA LATERAL ---
 def render_sidebar():
-    # INYECTAMOS LOS ESTILOS AL INICIO
+    # Inyectamos el diseño
     cargar_estilos_css()
     
-    # Título de la App
     st.sidebar.title("🔗 Kortexa AI")
     
-    # --- LOGICA DE LOGIN ---
+    # --- PANTALLA DE LOGIN ---
     if not st.session_state.usuario:
         t1, t2 = st.sidebar.tabs(["Ingresar", "Crear Cuenta"])
         
@@ -63,85 +62,85 @@ def render_sidebar():
                     st.query_params["user_token"] = u
                     st.rerun()
                 else: 
-                    st.error("Error de credenciales o usuario no registrado.")
+                    st.error("Credenciales incorrectas.")
         
         with t2:
-            nu = st.text_input("Crear Usuario", key="new_user")
-            np = st.text_input("Crear Contraseña", type="password", key="new_pass")
+            nu = st.text_input("Nuevo Usuario", key="new_user")
+            np = st.text_input("Nueva Contraseña", type="password", key="new_pass")
             if st.button("Crear Cuenta"):
                 if db.crear_user(nu, np): 
-                    st.success("¡Cuenta creada! Por favor ingresa desde la pestaña 'Ingresar'.")
+                    st.success("¡Cuenta creada! Ingresa en la otra pestaña.")
                 else: 
                     st.error("El usuario ya existe.")
         
         return None, None, None, None, None
 
-    # --- INTERFAZ DE USUARIO LOGUEADO ---
+    # --- PANTALLA PRINCIPAL (LOGUEADO) ---
     else:
-        st.sidebar.caption(f"👤 Conectado como: {st.session_state.usuario}")
+        st.sidebar.caption(f"👤 {st.session_state.usuario}")
         
-        # Botón para limpiar el chat actual
+        # Botón Nuevo Chat
         if st.sidebar.button("➕ Nuevo Chat", type="primary", use_container_width=True):
             st.session_state.chat_id = None
             st.rerun()
         
         st.sidebar.divider()
         
-        # 1. SELECCIÓN DE ROL
-        mensaje_ayuda = "Selecciona el trabajo que quieres realizar y automáticamente se asignarán los roles necesarios."
-        st.sidebar.subheader("🧠 Rol del Asistente", help=mensaje_ayuda)
+        # 1. SELECCIÓN DE ROL (Con tus textos)
+        st.sidebar.subheader("🧠 Rol del Asistente")
         
         tareas = roles.obtener_tareas()
         
-        # Buscamos el índice del rol por defecto
+        # Buscar índice por defecto
         default_role = "Asistente General (Multimodal)"
         idx = 0
         if default_role in tareas:
             idx = list(tareas.keys()).index(default_role)
         
-        # Callback para reiniciar chat al cambiar de rol
         def reset(): st.session_state.chat_id = None
         
         rol_sel = st.sidebar.selectbox(
-            "Selecciona un experto:", 
+            "Selecciona tu experto:", 
             list(tareas.keys()), 
             index=idx, 
             on_change=reset,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            help="Elige la personalidad de la IA para tu tarea actual."
         )
         
-        # 2. MENÚ DESPLEGABLE DE HERRAMIENTAS
+        # 2. HERRAMIENTAS
         st.sidebar.markdown("---")
         with st.sidebar.expander("📎 Herramientas", expanded=False):
-            st.caption("Configuración del chat actual:")
             
-            # Botones verticales
-            web_mode = st.toggle("🌍 Web", value=False, help="Fuerza a la IA a buscar información actualizada en internet.")
-            img_mode = st.toggle("🎨 Arte", value=False, help="Activa el modo de generación de imágenes.")
+            # Toggles
+            web_mode = st.toggle("🌍 Web", value=False, help="Activar búsqueda en Google.")
+            img_mode = st.toggle("🎨 Arte", value=False, help="Activar generador de imágenes.")
             
+            # Subida de archivo
             st.markdown("### 📂 Subir archivo")
             up_file = st.file_uploader(
-                "Sube un PDF o una Imágen", 
+                "PDF o Imagen", 
                 type=["pdf", "png", "jpg", "jpeg"], 
                 label_visibility="collapsed"
             )
             
             if up_file:
-                st.success(f"✅ Archivo listo: {up_file.name}")
+                st.success(f"✅ Cargado: {up_file.name}")
         
-        # 3. HISTORIAL DE CHATS
+        # 3. HISTORIAL
         st.sidebar.divider()
         st.sidebar.subheader("🗂️ Tus Conversaciones")
         
         sesiones = db.obtener_sesiones(st.session_state.usuario)
         
         if not sesiones:
-            st.sidebar.info("No hay chats guardados.")
+            st.sidebar.info("Sin historial reciente.")
         
         for sid, dat in sesiones:
             tipo = "primary" if sid == st.session_state.chat_id else "secondary"
+            # Cortamos el título si es muy largo
             titulo_raw = dat.get('titulo', 'Chat sin título')
-            titulo = titulo_raw[:22] + "..." if len(titulo_raw) > 22 else titulo_raw
+            titulo = titulo_raw[:20] + "..." if len(titulo_raw) > 20 else titulo_raw
             
             if st.sidebar.button(f"💬 {titulo}", key=sid, use_container_width=True, type=tipo):
                 st.session_state.chat_id = sid
@@ -156,7 +155,7 @@ def render_sidebar():
             
         return rol_sel, web_mode, img_mode, up_file, tareas
 
-# --- FUNCIÓN 2: RENDERIZAR MENSAJES ---
+# --- RENDERIZADO DE MENSAJES ---
 def render_chat_msgs(msgs):
     if not msgs:
         return
