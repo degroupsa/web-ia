@@ -36,7 +36,7 @@ img_vision = None
 msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
 if not msgs and not st.session_state.chat_id:
     # <--- SALUDO PERSONALIZADO CON EL NOMBRE NUEVO
-    st.info(f"Hola! 👋 Soy Kortexa, tu asistente IA {info_rol['desc']}")
+    st.info(f"Hola! 👋 Soy Kortexa, tu asistente IA. Mi Rol actual: {info_rol['desc']}")
 
 # Renderizar mensajes anteriores
 ui.render_chat_msgs(msgs)
