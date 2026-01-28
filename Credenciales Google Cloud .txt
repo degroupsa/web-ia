@@ -1,0 +1,3 @@
+Enlace: https://console.cloud.google.com/auth/clients/create?authuser=1&project=kortexa-ai-485717
+
+ID de cliente: 108876587124-l3dqgv45krhmoaoquipri9ohm1i260bp.apps.googleusercontent.com

@@ -122,3 +122,9 @@ def cargar_msgs(usuario, chat_id):
         return []
     except:
         return []
+    
+def login_google(email, nombre):
+    """Permite el ingreso con Google. Aquí podrías guardar el usuario en tu BD real."""
+    # Aquí iría la lógica para guardar el email en tu CSV o SQL si no existe.
+    # Por ahora retornamos True para permitir el paso.
+    return True
