@@ -125,12 +125,12 @@ def cargar_estilos_css():
                 border: 1px solid #ddd !important;
             }
 
-            /* --- NUEVO: PERFIL COMPACTO (Reemplaza tarjeta grande) --- */
+            /* PERFIL COMPACTO */
             .user-profile-compact {
                 display: flex;
                 align-items: center;
                 padding: 12px;
-                background: rgba(255, 255, 255, 0.03); /* Fondo sutil */
+                background: rgba(255, 255, 255, 0.03);
                 border: 1px solid rgba(255, 255, 255, 0.05);
                 border-radius: 10px;
                 margin-bottom: 20px;
@@ -204,7 +204,7 @@ def render_sidebar():
             </div>
         """, unsafe_allow_html=True)
 
-        # --- SIDEBAR (Login/Registro/Google) ---
+        # --- SIDEBAR ---
         with st.sidebar:
             col_icon, col_text = st.columns([1, 3])
             with col_icon:
@@ -218,15 +218,12 @@ def render_sidebar():
             
             st.divider()
 
-            # Obtenemos la URL de Google dinámicamente
-            try:
-                google_url = google_auth.get_login_url()
-            except:
-                google_url = "#" 
+            try: google_url = google_auth.get_login_url()
+            except: google_url = "#" 
 
             t_crear, t_login = st.tabs(["✔️ Crear Cuenta", "🔐 Ingresar"])
             
-            # --- PESTAÑA 1: CREAR CUENTA ---
+            # PESTAÑA 1: CREAR CUENTA
             with t_crear:
                 st.write("")
                 st.markdown("##### Nuevo Usuario")
@@ -236,7 +233,6 @@ def render_sidebar():
                 if st.button("Registrarse", use_container_width=True, type="primary"):
                     if db.crear_user(nu, np): 
                         st.session_state.usuario = nu
-                        # PERSISTENCIA: Guardamos usuario en URL
                         st.query_params["user_token"] = nu 
                         st.toast(f"¡Bienvenido, {nu}!", icon="🚀")
                         st.rerun()
@@ -246,7 +242,7 @@ def render_sidebar():
                 st.markdown('<div class="separator">o regístrate con</div>', unsafe_allow_html=True)
                 st.link_button("🔵 Continuar con Google", google_url, use_container_width=True)
 
-            # --- PESTAÑA 2: INGRESAR ---
+            # PESTAÑA 2: INGRESAR
             with t_login:
                 st.write("")
                 st.markdown("##### Iniciar Sesión")
@@ -256,14 +252,13 @@ def render_sidebar():
                 if st.button("Ingresar", use_container_width=True):
                     if db.login(u, p):
                         st.session_state.usuario = u
-                        # PERSISTENCIA: Guardamos usuario en URL
                         st.query_params["user_token"] = u 
                         st.rerun()
                     else:
                         st.error("Datos incorrectos.")
                 
                 st.markdown('<div class="separator">o inicia con</div>', unsafe_allow_html=True)
-                st.link_button("🌐​ Continuar con Google", google_url, use_container_width=True)
+                st.link_button("🔵 Continuar con Google", google_url, use_container_width=True)
             
             st.markdown("---")
             st.caption("© 2026 Kortexa AI & DE Group Enterprise. All rights reserved.")
@@ -283,11 +278,10 @@ def render_sidebar():
                     st.write("⚡")
             with col_text:
                 st.markdown('<div class="sidebar-brand">KORTEXA</div>', unsafe_allow_html=True)
-                st.caption("Inteligencia Neuronal")
             
             st.divider()
             
-            # --- NUEVO PERFIL COMPACTO (Eliminada la tarjeta azul grande) ---
+            # --- TU PERFIL COMPACTO ---
             inicial = st.session_state.usuario[0].upper()
             st.markdown(f"""
                 <div class="user-profile-compact">
@@ -328,7 +322,6 @@ def render_sidebar():
                         st.rerun()
             
             st.divider()
-            # Al cerrar sesión, limpiamos el query param para que no vuelva a entrar
             if st.button("🔒 Cerrar Sesión", use_container_width=True):
                 st.session_state.usuario = None
                 st.query_params.clear() 
@@ -345,27 +338,29 @@ def render_chat_msgs(msgs):
             else:
                 st.markdown(m["content"])
 
-# --- NUEVA FUNCIÓN: PANTALLA DE BIENVENIDA MEJORADA ---
+# --- NUEVA FUNCIÓN: PANTALLA DE BIENVENIDA (TEXTO KORTEXA) ---
 def render_welcome_screen(rol_desc):
+    # Saludo principal
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 40px; margin-top: 20px;">
-        <h1 style="background: linear-gradient(to right, #FF5F1F, #FF8C00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800;">Hola, {st.session_state.usuario}</h1>
-        <p style="color: #999; font-size: 18px;">{rol_desc}</p>
+        <h1 style="background: linear-gradient(to right, #FF5F1F, #FF8C00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 60px;">Hola! Soy Kortexa</h1>
+        <h3 style="color: #E0E0E0; font-weight: 400; font-size: 20px;">Estoy aquí para potenciar tus proyectos. ¿En qué puedo ayudarte hoy?</h3>
+        <p style="color: #999; font-size: 16px; margin-top: 10px;">Si eres nuevo en la app, <b>Puedo enseñarte a utilizarme!</b> Solo tiene que preguntarme, "Como funcionas?" o "Como te utilizo?"</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Tarjetas de sugerencias
+    # Tarjetas de sugerencias (Prompt Starters)
     c1, c2, c3 = st.columns(3)
     
     with c1:
         with st.container(border=True):
-            st.markdown("📄 **Analizar Documentos**")
-            st.caption("Resume el archivo PDF adjunto y extrae los 5 puntos clave.")
+            st.markdown("📄 **Análisis de Datos**")
+            st.caption("Carga un documento y pídeme que extraiga la información clave.")
     with c2:
         with st.container(border=True):
-            st.markdown("🎨 **Generar Arte**")
-            st.caption("Crea un logo minimalista para una startup tecnológica en 8k.")
+            st.markdown("❓ **Ayuda y Soporte**")
+            st.caption("Si eres nuevo, prueba preguntarme: *'¿Cómo funcionas?'* o *'Dame un tour'*.")
     with c3:
         with st.container(border=True):
-            st.markdown("🧠 **Investigación**")
-            st.caption("Busca las últimas novedades sobre inteligencia artificial generativa.")
+            st.markdown("🎨 **Creatividad**")
+            st.caption("Genera imágenes únicas o redacta contenido original en segundos.")

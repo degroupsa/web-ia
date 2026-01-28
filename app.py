@@ -15,7 +15,6 @@ st.set_page_config(
 )
 
 # --- 2. GESTIÓN DE PERSISTENCIA (FIX REFRESH) ---
-# Verificamos si hay un token de usuario en la URL
 if "user_token" in st.query_params and "usuario" not in st.session_state:
     st.session_state.usuario = st.query_params["user_token"]
 elif "usuario" not in st.session_state:
@@ -66,8 +65,9 @@ if up_file:
 # Cargar historial
 msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
 
-# Pantalla de Bienvenida (NUEVA)
+# --- PANTALLA DE BIENVENIDA (Aquí llamamos a la nueva función) ---
 if not msgs and not st.session_state.chat_id:
+    # Esta función ahora está definida en tu ui.py actualizado
     ui.render_welcome_screen(info_rol['desc'])
 
 # Renderizar chat
