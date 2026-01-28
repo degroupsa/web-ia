@@ -343,7 +343,7 @@ def render_welcome_screen(rol_desc):
     # Saludo principal
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 40px; margin-top: 20px;">
-        <h1 style="background: linear-gradient(to right, #FF5F1F, #FF8C00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 60px;">Hola! Soy Kortexa</h1>
+        <h1 style="background: linear-gradient(to right, #FF5F1F, #FF8C00); font-family: 'Roboto', sans-serif; -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; font-size: 55px;">Hola! Soy Kortexa</h1>
         <h3 style="color: #E0E0E0; font-weight: 400; font-size: 20px;">Estoy aquí para potenciar tus proyectos. ¿En qué puedo ayudarte hoy?</h3>
         <p style="color: #999; font-size: 16px; margin-top: 10px;">Si eres nuevo en la app, <b>Puedo enseñarte a utilizarme!</b> Solo tiene que preguntarme, "Como funcionas?" o "Como te utilizo?"</p>
     </div>
