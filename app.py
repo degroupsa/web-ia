@@ -5,8 +5,25 @@ from modules import cerebro
 from modules import ui
 from modules import google_auth
 import base64
+import os
+import shutil
 
-# --- 1. CONFIGURACIÓN (SIEMPRE VA PRIMERO) ---
+# --- 0. BLOQUE DE AUTO-REPARACIÓN PARA RENDER ---
+# Esto busca el archivo secreto y lo mueve a la carpeta correcta automáticamente
+try:
+    if not os.path.exists(".streamlit/secrets.toml"):
+        # Crea la carpeta si no existe
+        os.makedirs(".streamlit", exist_ok=True)
+        # Busca el archivo en la ruta de Render y lo copia
+        if os.path.exists("/etc/secrets/secrets.toml"):
+            shutil.copy("/etc/secrets/secrets.toml", ".streamlit/secrets.toml")
+            print("✅ Archivo secrets.toml movido correctamente.")
+        else:
+            print("⚠️ No se encontró /etc/secrets/secrets.toml")
+except Exception as e:
+    print(f"⚠️ Error intentando mover secretos: {e}")
+
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(
     page_title="Kortexa AI", 
     layout="wide", 
@@ -14,7 +31,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. GESTIÓN DE PERSISTENCIA (FIX REFRESH) ---
+# --- 2. GESTIÓN DE PERSISTENCIA ---
 if "user_token" in st.query_params and "usuario" not in st.session_state:
     st.session_state.usuario = st.query_params["user_token"]
 elif "usuario" not in st.session_state:
@@ -34,7 +51,7 @@ if "code" in st.query_params:
         
         if db.login_google(email, nombre):
             st.session_state.usuario = email
-            st.query_params["user_token"] = email # Persistencia
+            st.query_params["user_token"] = email
             st.toast(f"¡Hola {nombre}!", icon="👋")
             st.rerun()
 
@@ -62,12 +79,11 @@ if up_file:
     else:
         img_vision = base64.b64encode(up_file.getvalue()).decode('utf-8')
 
-# --- CARGAR HISTORIAL CON SEGURIDAD (CORRECCIÓN MÓVIL) ---
+# --- CARGAR HISTORIAL CON SEGURIDAD ---
 if st.session_state.usuario:
     if not st.session_state.chat_id:
         msgs = []
     else:
-        # El "or []" evita que msgs sea None y rompa el chat en el celular
         msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id) or []
 else:
     msgs = []
@@ -120,14 +136,12 @@ if prompt:
             st.markdown(respuesta)
             
         else:
-            # CORRECCIÓN DE SEGURIDAD: Aseguramos que msgs sea una lista
             msgs_safe = msgs if msgs is not None else []
             respuesta = cerebro.procesar_texto(
                 prompt, msgs_safe, info_rol['prompt'], web_mode, ctx_pdf, rol_sel
             )
             st.markdown(respuesta)
 
-            # Auto-scroll
             js_scroll = """
             <script>
                 var chat_elements = window.parent.document.querySelectorAll('.stChatMessage');
