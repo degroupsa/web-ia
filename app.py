@@ -1,29 +1,31 @@
 import streamlit as st
 import streamlit.components.v1 as components
-from modules import database as db
-from modules import cerebro
-from modules import ui
-from modules import google_auth
 import base64
 import os
 import shutil
 
-# --- 0. BLOQUE DE AUTO-REPARACIÓN PARA RENDER ---
-# Esto busca el archivo secreto y lo mueve a la carpeta correcta automáticamente
+# --- 0. BLOQUE DE AUTO-REPARACIÓN (CRÍTICO: DEBE IR PRIMERO) ---
+# Esto asegura que el archivo secrets.toml exista ANTES de importar google_auth
 try:
-    if not os.path.exists(".streamlit/secrets.toml"):
-        # Crea la carpeta si no existe
-        os.makedirs(".streamlit", exist_ok=True)
-        # Busca el archivo en la ruta de Render y lo copia
-        if os.path.exists("/etc/secrets/secrets.toml"):
-            shutil.copy("/etc/secrets/secrets.toml", ".streamlit/secrets.toml")
-            print("✅ Archivo secrets.toml movido correctamente.")
-        else:
-            print("⚠️ No se encontró /etc/secrets/secrets.toml")
-except Exception as e:
-    print(f"⚠️ Error intentando mover secretos: {e}")
+    # Definimos rutas
+    render_secrets = "/etc/secrets/secrets.toml"
+    target_folder = ".streamlit"
+    target_file = os.path.join(target_folder, "secrets.toml")
 
-# --- 1. CONFIGURACIÓN ---
+    # Si no existe la carpeta local, la creamos
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder, exist_ok=True)
+
+    # Si estamos en Render y el archivo no está en su sitio, lo movemos
+    if os.path.exists(render_secrets) and not os.path.exists(target_file):
+        shutil.copy(render_secrets, target_file)
+        print("✅ Archivo secrets.toml movido exitosamente al inicio.")
+        
+except Exception as e:
+    print(f"⚠️ Error en auto-reparación: {e}")
+
+
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="Kortexa AI", 
     layout="wide", 
@@ -31,7 +33,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. GESTIÓN DE PERSISTENCIA ---
+# --- 2. IMPORTS DE MÓDULOS (AHORA ES SEGURO IMPORTARLOS) ---
+# Importamos aquí para que lean los secretos que acabamos de mover
+from modules import database as db
+from modules import cerebro
+from modules import ui
+from modules import google_auth 
+
+# --- 3. GESTIÓN DE PERSISTENCIA ---
 if "user_token" in st.query_params and "usuario" not in st.session_state:
     st.session_state.usuario = st.query_params["user_token"]
 elif "usuario" not in st.session_state:
@@ -40,7 +49,7 @@ elif "usuario" not in st.session_state:
 if "chat_id" not in st.session_state: 
     st.session_state.chat_id = None
 
-# --- 3. LÓGICA DE GOOGLE ---
+# --- 4. LÓGICA DE GOOGLE ---
 if "code" in st.query_params:
     code = st.query_params["code"]
     user_info = google_auth.get_user_info(code)
@@ -55,7 +64,7 @@ if "code" in st.query_params:
             st.toast(f"¡Hola {nombre}!", icon="👋")
             st.rerun()
 
-# --- 4. RENDERIZAR SIDEBAR ---
+# --- 5. RENDERIZAR SIDEBAR ---
 resultado_sidebar = ui.render_sidebar()
 
 if resultado_sidebar[0] is None:
@@ -64,9 +73,9 @@ if resultado_sidebar[0] is None:
 # Desempaquetamos variables
 rol_sel, web_mode, img_mode_manual, up_file, tareas_dict = resultado_sidebar
 
-# --- 5. CABECERA Y APP ---
+# --- 6. CABECERA Y APP ---
 info_rol = tareas_dict[rol_sel]
-st.subheader(f"{info_rol.get('icon','🔗')} {rol_sel}")
+st.subheader(f"{info_rol.get('icon','🔗')} {info_rol.get('title', rol_sel)}") # Pequeña mejora para evitar error si falta title
 
 # Procesamiento de archivos
 ctx_pdf = None
@@ -79,7 +88,7 @@ if up_file:
     else:
         img_vision = base64.b64encode(up_file.getvalue()).decode('utf-8')
 
-# --- CARGAR HISTORIAL CON SEGURIDAD ---
+# --- CARGAR HISTORIAL ---
 if st.session_state.usuario:
     if not st.session_state.chat_id:
         msgs = []
