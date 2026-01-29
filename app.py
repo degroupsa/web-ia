@@ -60,7 +60,12 @@ if "code" in st.query_params:
         
         if db.login_google(email, nombre):
             st.session_state.usuario = email
-            st.query_params["user_token"] = email
+            
+            # --- LIMPIEZA DE URL (FIX INVALID_GRANT) ---
+            # Borramos el 'code' viejo para que no se re-envíe al recargar
+            st.query_params.clear()
+            st.query_params["user_token"] = email 
+            
             st.toast(f"¡Hola {nombre}!", icon="👋")
             st.rerun()
 
