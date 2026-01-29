@@ -33,8 +33,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. IMPORTS DE MÓDULOS (AHORA ES SEGURO IMPORTARLOS) ---
-# Importamos aquí para que lean los secretos que acabamos de mover
+# --- 2. IMPORTS DE MÓDULOS ---
+# Importamos aquí para que lean los secretos que acabamos de mover (si aplicaba)
 from modules import database as db
 from modules import cerebro
 from modules import ui
@@ -49,25 +49,35 @@ elif "usuario" not in st.session_state:
 if "chat_id" not in st.session_state: 
     st.session_state.chat_id = None
 
-# --- 4. LÓGICA DE GOOGLE ---
+# --- 4. LÓGICA DE GOOGLE (CORREGIDA Y BLINDADA) ---
+# Solo procesamos el código si el usuario NO está logueado aún.
 if "code" in st.query_params:
-    code = st.query_params["code"]
-    user_info = google_auth.get_user_info(code)
-    
-    if user_info:
-        email = user_info.get("email")
-        nombre = user_info.get("name")
+    # Caso A: Usuario no logueado, intentamos entrar
+    if not st.session_state.usuario:
+        code = st.query_params["code"]
+        user_info = google_auth.get_user_info(code)
         
-        if db.login_google(email, nombre):
-            st.session_state.usuario = email
+        if user_info:
+            email = user_info.get("email")
+            nombre = user_info.get("name")
             
-            # --- LIMPIEZA DE URL (FIX INVALID_GRANT) ---
-            # Borramos el 'code' viejo para que no se re-envíe al recargar
-            st.query_params.clear()
-            st.query_params["user_token"] = email 
-            
-            st.toast(f"¡Hola {nombre}!", icon="👋")
-            st.rerun()
+            if db.login_google(email, nombre):
+                st.session_state.usuario = email
+                
+                # --- LIMPIEZA DE URL (FIX CRÍTICO) ---
+                # Borramos el 'code' viejo para evitar error 'invalid_grant' al recargar
+                st.query_params.clear()
+                st.query_params["user_token"] = email 
+                
+                st.toast(f"¡Hola {nombre}!", icon="👋")
+                st.rerun()
+    
+    # Caso B: Usuario YA logueado pero el código sigue en la URL
+    else:
+        # Limpiamos la URL silenciosamente para que quede limpia
+        st.query_params.clear()
+        if st.session_state.usuario:
+             st.query_params["user_token"] = st.session_state.usuario
 
 # --- 5. RENDERIZAR SIDEBAR ---
 resultado_sidebar = ui.render_sidebar()
@@ -80,7 +90,7 @@ rol_sel, web_mode, img_mode_manual, up_file, tareas_dict = resultado_sidebar
 
 # --- 6. CABECERA Y APP ---
 info_rol = tareas_dict[rol_sel]
-st.subheader(f"{info_rol.get('icon','🔗')} {info_rol.get('title', rol_sel)}") # Pequeña mejora para evitar error si falta title
+st.subheader(f"{info_rol.get('icon','🔗')} {info_rol.get('title', rol_sel)}")
 
 # Procesamiento de archivos
 ctx_pdf = None
