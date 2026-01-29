@@ -62,12 +62,18 @@ if up_file:
     else:
         img_vision = base64.b64encode(up_file.getvalue()).decode('utf-8')
 
-# Cargar historial
-msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
+# --- CARGAR HISTORIAL CON SEGURIDAD (CORRECCIÓN MÓVIL) ---
+if st.session_state.usuario:
+    if not st.session_state.chat_id:
+        msgs = []
+    else:
+        # El "or []" evita que msgs sea None y rompa el chat en el celular
+        msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id) or []
+else:
+    msgs = []
 
-# --- PANTALLA DE BIENVENIDA (Aquí llamamos a la nueva función) ---
+# --- PANTALLA DE BIENVENIDA ---
 if not msgs and not st.session_state.chat_id:
-    # Esta función ahora está definida en tu ui.py actualizado
     ui.render_welcome_screen(info_rol['desc'])
 
 # Renderizar chat
@@ -114,8 +120,10 @@ if prompt:
             st.markdown(respuesta)
             
         else:
+            # CORRECCIÓN DE SEGURIDAD: Aseguramos que msgs sea una lista
+            msgs_safe = msgs if msgs is not None else []
             respuesta = cerebro.procesar_texto(
-                prompt, msgs, info_rol['prompt'], web_mode, ctx_pdf, rol_sel
+                prompt, msgs_safe, info_rol['prompt'], web_mode, ctx_pdf, rol_sel
             )
             st.markdown(respuesta)
 
