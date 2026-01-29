@@ -5,40 +5,44 @@ import socket
 
 # --- 1. DETECCIÓN AUTOMÁTICA DE ENTORNO (LOCAL vs WEB) ---
 def is_local_environment():
-    """Devuelve True si estamos en la PC, False si estamos en la Web."""
+    """Detecta si estamos corriendo en la PC o en el Servidor."""
     try:
         hostname = socket.gethostname().lower()
-        # Si el nombre de la máquina tiene 'local', 'desktop' o 'laptop', es tu PC
+        # Si el nombre de la máquina parece una PC, asumimos local
         if "local" in hostname or "desktop" in hostname or "laptop" in hostname:
             return True
         return False
     except:
         return False
 
-# --- 2. CARGAR CLAVES DESDE SECRETS ---
+# --- 2. CARGAR CLAVES CON SEGURIDAD ---
 try:
+    # Verificamos si existe la sección [google] en los secretos
     if "google" in st.secrets:
         CLIENT_ID = st.secrets["google"]["client_id"]
         CLIENT_SECRET = st.secrets["google"]["client_secret"]
         
-        # Lógica de selección de URI
+        # Selección Inteligente de URL
         if is_local_environment():
             # Si estoy en mi PC, uso la dirección local
             REDIRECT_URI = st.secrets["google"].get("redirect_uri_local", "http://localhost:8501")
-            # print("🔹 MODO LOCAL DETECTADO") # Debug en consola
         else:
             # Si estoy en internet, uso la dirección de producción
             REDIRECT_URI = st.secrets["google"].get("redirect_uri_prod", "https://kortexa.com.ar")
-            # print("🔸 MODO PRODUCCIÓN DETECTADO") # Debug en consola
     else:
-        # Si falta la sección [google] en secrets.toml
+        # Si el archivo existe pero no tiene [google]
+        st.error("⚠️ El archivo secrets.toml existe pero le falta la sección [google].")
         CLIENT_ID = None
         CLIENT_SECRET = None
         REDIRECT_URI = None
 
+except FileNotFoundError:
+    st.error("⚠️ No se encuentra el archivo .streamlit/secrets.toml")
+    CLIENT_ID = None
+    REDIRECT_URI = None
 except Exception as e:
-    # Captura errores si el archivo secrets.toml está mal escrito
-    st.error(f"Error crítico leyendo secrets.toml: {e}")
+    # Captura errores generales de carga
+    # st.error(f"⚠️ Error leyendo secretos: {e}") # Descomentar para debug
     CLIENT_ID = None
     REDIRECT_URI = None
 
@@ -50,9 +54,8 @@ USER_INFO_URL = "https://www.googleapis.com/oauth2/v1/userinfo"
 
 def get_login_url():
     """Genera el enlace para el botón de Google."""
-    # Validación de seguridad: Si no hay ID o URI, no generamos link roto
+    # SI FALTA EL ID, NO GENERAMOS UN LINK ROTO QUE DA ERROR 400
     if not CLIENT_ID or not REDIRECT_URI:
-        st.error("⚠️ Falta configuración de Google (Client ID o Redirect URI). Revisa secrets.toml")
         return "#"
         
     params = {
@@ -68,8 +71,9 @@ def get_login_url():
 def get_user_info(auth_code):
     """Intercambia el código de autorización por los datos del usuario."""
     
-    # Validación doble
+    # Validación de seguridad
     if not CLIENT_ID or not REDIRECT_URI: 
+        st.error("Falta configuración de credenciales.")
         return None
 
     try:
@@ -77,7 +81,7 @@ def get_user_info(auth_code):
             "code": auth_code,
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
-            "redirect_uri": REDIRECT_URI, # ¡Debe ser IDÉNTICA a la usada en get_login_url!
+            "redirect_uri": REDIRECT_URI,
             "grant_type": "authorization_code",
         }
         
@@ -97,7 +101,6 @@ def get_user_info(auth_code):
         user_r = requests.get(USER_INFO_URL, headers=headers)
         
         if not user_r.ok:
-            st.error("❌ Error obteniendo perfil de usuario.")
             return None
             
         return user_r.json()
