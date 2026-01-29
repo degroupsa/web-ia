@@ -112,11 +112,16 @@ if st.session_state.usuario:
 else:
     msgs = []
 
-# --- PANTALLA DE BIENVENIDA ---
+# --- PANTALLA DE BIENVENIDA VS CABECERA MINI ---
+# Si NO hay historial y NO hay sesión de chat activa -> Mostramos Bienvenida Gigante
 if not msgs and not st.session_state.chat_id:
     ui.render_welcome_screen(info_rol['desc'])
 
-# Renderizar chat
+# Si YA estamos chateando -> Mostramos la Cabecera Mini (Anchor Visual)
+else:
+    ui.render_mini_header()
+
+# Renderizar chat (Esto sigue igual)
 ui.render_chat_msgs(msgs)
 
 # Barra de estado

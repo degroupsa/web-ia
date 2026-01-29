@@ -2,8 +2,18 @@ import streamlit as st
 from modules import database as db
 from modules import roles
 from modules import google_auth
-from modules import styles  # <--- IMPORTAMOS TU NUEVO MÓDULO
+from modules import styles
 import os
+import base64  # <--- AGREGADO: Necesario para leer la imagen
+
+# --- FUNCIÓN AUXILIAR (NUEVA) ---
+def get_img_as_base64(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return None
 
 # --- INTERFAZ PRINCIPAL ---
 def render_sidebar():
@@ -45,9 +55,6 @@ def render_sidebar():
 
         # --- SIDEBAR LOGIN ---
         with st.sidebar:
-# [0.6] es el espacio de la K, [2] es el espacio del Texto.
-# - Si bajas el 0.6 a 0.5 -> La K se pega más a la izquierda y el texto se acerca.
-# - Si subes el 0.6 a 0.8 -> La K tiene más espacio y empuja el texto a la derecha.
             col_icon, col_text = st.columns([0.6, 3])
             with col_icon:
                 if os.path.exists("icon.png"): st.image("icon.png", width=50)
@@ -144,7 +151,6 @@ def render_sidebar():
             
             def reset(): st.session_state.chat_id = None
             
-            # El CSS en styles.py ahora se encargará de que esto se vea bien
             rol = st.selectbox("Rol Seleccionado:", list(tareas.keys()), index=idx, on_change=reset)
             
             with st.expander("⚙️ Configuración"):
@@ -182,10 +188,8 @@ def render_chat_msgs(msgs):
                 st.markdown(m["content"])
 
 def render_welcome_screen(rol_desc):
-    # Usamos la función del archivo de estilos
     styles.render_welcome_html()
     
-    # Tarjetas de sugerencias
     c1, c2, c3 = st.columns(3)
     with c1:
         with st.container(border=True):
@@ -199,3 +203,49 @@ def render_welcome_screen(rol_desc):
         with st.container(border=True):
             st.markdown("🎨 **Creatividad**")
             st.caption("Genera imágenes únicas o redacta contenido original en segundos.")
+
+# --- NUEVA FUNCIÓN: CABECERA MINI CON LOGO K ---
+def render_mini_header():
+    # Intentamos cargar el logo usando la función auxiliar
+    img_b64 = get_img_as_base64("icon.png")
+    
+    if img_b64:
+        # Si existe, inyectamos el HTML con la imagen codificada
+        icon_html = f'<img src="data:image/png;base64,{img_b64}" style="width: 35px; height: 35px; margin-right: 12px; vertical-align: middle; border-radius: 5px;">'
+    else:
+        # Fallback al rayo si falla
+        icon_html = '<span style="font-size: 25px; margin-right: 10px;">⚡</span>'
+
+    st.markdown(f"""
+    <div style="
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        margin-bottom: 25px; 
+        padding-bottom: 15px; 
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        animation: fadeIn 0.5s ease-in-out;
+    ">
+        {icon_html}
+        <h3 style="
+            margin:0; 
+            font-size: 22px; 
+            background: linear-gradient(90deg, #FF5F1F, #FFAA00); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            font-weight: 800; 
+            font-family: 'Inter', sans-serif;
+            display: inline-block;
+            vertical-align: middle;
+            line-height: 1.5;
+        ">
+            KORTEXA AI
+        </h3>
+    </div>
+    <style>
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(-10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+    </style>
+    """, unsafe_allow_html=True)
