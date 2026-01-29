@@ -1,9 +1,10 @@
 import streamlit as st
+import os  # <--- 1. IMPORTANTE: Necesario para leer variables de Render
 from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 from pypdf import PdfReader
-from modules import roles  # <--- Importamos roles
+from modules import roles 
 
 # --- MANUAL DE USO DINÁMICO (CEREBRO DE LA IDENTIDAD) ---
 def obtener_guia_dinamica(rol_actual):
@@ -53,14 +54,24 @@ def obtener_guia_dinamica(rol_actual):
        (Luego de este bloque, responde a la pregunta lo mejor que puedas).
     """
 
-# --- CLIENTE ---
+# --- CLIENTE (HÍBRIDO: RENDER + LOCAL) ---
 def obtener_cliente():
-    try: return OpenAI(api_key=str(st.secrets["OPENAI_KEY"]))
-    except: return None
+    # 1. Intentamos leer la variable de entorno de Render
+    api_key = os.environ.get("OPENAI_API_KEY")
+    
+    # 2. Si no existe (estamos en local), usamos st.secrets
+    if not api_key:
+        try:
+            api_key = st.secrets["OPENAI_KEY"]
+        except:
+            return None
+
+    return OpenAI(api_key=str(api_key))
 
 # --- 1. ROUTER ---
 def decidir_si_buscar(prompt):
     client = obtener_cliente()
+    if not client: return False # Protección si no hay clave
     try:
         res = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -104,7 +115,13 @@ def leer_pdf(file):
 
 def buscar_web(query):
     try:
-        tavily = TavilyClient(api_key=str(st.secrets["TAVILY_KEY"]))
+        # Lógica híbrida también para Tavily
+        t_key = os.environ.get("TAVILY_KEY")
+        if not t_key:
+            try: t_key = st.secrets["TAVILY_KEY"]
+            except: return "Error: Falta API Key de Tavily."
+
+        tavily = TavilyClient(api_key=str(t_key))
         res = tavily.search(query=query, search_depth="advanced")
         return "\n".join([f"- {r['title']}: {r['content']}" for r in res.get('results', [])[:3]])
     except: return "Sin conexión."
@@ -112,6 +129,8 @@ def buscar_web(query):
 # --- 3. PROCESADOR PRINCIPAL ---
 def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual):
     client = obtener_cliente()
+    if not client: return "⚠️ Error de Configuración: No se detectó la API Key de OpenAI."
+
     ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     
     # Auto-piloto
@@ -138,12 +157,15 @@ def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual
     hist_clean = [{"role": m["role"], "content": m["content"]} for m in hist if not m["content"].startswith("http")]
     msgs += hist_clean + [{"role": "user", "content": msg}]
     
+    # Usamos gpt-4o (asegúrate que tu cuenta tenga saldo, sino cambia a gpt-3.5-turbo)
     res = client.chat.completions.create(model="gpt-4o", messages=msgs)
     return res.choices[0].message.content + debug_msg
 
 def generar_titulo(msg):
+    client = obtener_cliente()
+    if not client: return "Nuevo Chat"
     try:
-        return obtener_cliente().chat.completions.create(
+        return client.chat.completions.create(
             model="gpt-4o-mini", messages=[{"role":"user", "content":f"Título 3 palabras: {msg}"}], max_tokens=10
         ).choices[0].message.content.strip()
     except: return "Nuevo Chat"
