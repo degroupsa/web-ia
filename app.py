@@ -4,6 +4,14 @@ import base64
 import os
 import shutil
 
+# --- CONFIGURACIÓN DE PÁGINA (ESTO DEBE IR PRIMERO) ---
+st.set_page_config(
+    page_title="Kortexa AI",       # Título en la pestaña
+    page_icon="icon.png",          # Icono en la pestaña (usa tu archivo icon.png)
+    layout="wide",                 # Diseño amplio
+    initial_sidebar_state="expanded"
+)
+
 # --- 0. BLOQUE DE AUTO-REPARACIÓN (CRÍTICO: DEBE IR PRIMERO) ---
 # Esto asegura que el archivo secrets.toml exista ANTES de importar google_auth
 try:
@@ -25,13 +33,6 @@ except Exception as e:
     print(f"⚠️ Error en auto-reparación: {e}")
 
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="Kortexa AI", 
-    layout="wide", 
-    page_icon="icon.png", 
-    initial_sidebar_state="expanded"
-)
 
 # --- 2. IMPORTS DE MÓDULOS ---
 # Importamos aquí para que lean los secretos que acabamos de mover (si aplicaba)

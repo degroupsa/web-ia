@@ -24,18 +24,19 @@ def cargar_css():
             /* =========================================
                2. CORRECCIONES DE ESPACIO (ZONAS ROJAS)
                ========================================= */
-                
+            
+            /* Ajuste del contenedor principal del sidebar */
             section[data-testid="stSidebar"] > div {
                 padding-top: 0rem !important; 
             }
             
-            /* A. QUITAR ESPACIO DE ARRIBA (El que marcaste en negro) */
+            /* Eliminamos huecos superiores */
             section[data-testid="stSidebar"] .block-container {
-                padding-top: 1rem !important; /* Dejamos 1rem mínimo para no chocar con la línea naranja */
-                margin-top: -20px !important; /* Truco final: Subirlo a la fuerza si el padding falla */
+                padding-top: 1rem !important; 
+                margin-top: -20px !important; 
             }
 
-            /* 3. Ajuste del separador */
+            /* Ajuste del separador (divider) */
             [data-testid="stSidebar"] hr {
                 margin-top: 0px !important;
                 margin-bottom: 15px !important;
@@ -44,7 +45,11 @@ def cargar_css():
             /* =========================================
                3. AJUSTES GENERALES
                ========================================= */
-            .block-container { padding-top: 3rem; padding-bottom: 5rem; }
+            .block-container { 
+                padding-top: 3rem; 
+                padding-bottom: 5rem; 
+            }
+            
             #MainMenu { visibility: hidden; }
             footer { visibility: hidden; }
             
@@ -160,7 +165,9 @@ def cargar_css():
             .user-name { font-size: 14px; font-weight: 600; color: white; }
             .user-role { font-size: 11px; color: #888; }
             
-            /* TÍTULOS PANTALLA BIENVENIDA */
+            /* =========================================
+               8. TÍTULOS PANTALLA BIENVENIDA
+               ========================================= */
             .brand-title {
                 font-family: 'Inter', sans-serif;
                 font-weight: 800;
@@ -229,6 +236,113 @@ def cargar_css():
             }
             .separator::before { margin-right: 10px; }
             .separator::after { margin-left: 10px; }
+
+            /* =========================================
+               9. ARREGLO BOTONES BORRAR (POPOVER)
+               ========================================= */
+            /* Apunta al botón 'X' (popover) para quitarle el borde gris */
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button {
+                border: none !important;
+                background: transparent !important;
+                color: #666 !important;
+                padding: 0px 5px !important;
+                font-size: 18px !important;
+                transition: all 0.2s ease !important;
+            }
+
+            /* Al pasar el mouse, se pone rojo */
+            [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+                color: #FF4B4B !important; 
+                background: rgba(255, 75, 75, 0.1) !important;
+            }
+
+            /* =========================================
+               10. ARREGLO AVATAR CHAT (LA 'K')
+               ========================================= */
+            
+            /* El círculo contenedor: le damos fondo negro y borde */
+            [data-testid="stChatMessageAvatar"] {
+                background-color: #000000 !important;
+                border: 1px solid #222 !important;
+                overflow: hidden !important;
+            }
+            
+            /* La imagen dentro del círculo: La achicamos al 60% para que no toque los bordes */
+            [data-testid="stChatMessageAvatar"] img {
+                width: 60% !important;  
+                height: 60% !important;
+                margin-top: 20% !important; /* Centrado vertical */
+                margin-left: 20% !important; /* Centrado horizontal */
+                object-fit: contain !important;
+            }
+                
+            /* =========================================
+               11. TRADUCCIÓN FILE UPLOADER (HACK VISUAL)
+               ========================================= */
+            
+            /* 1. Ocultamos el texto original "Drag and drop file here" */
+            [data-testid="stFileUploaderDropzone"] div div span {
+               display: none;
+            }
+            
+            /* 2. Insertamos el texto en Español */
+            [data-testid="stFileUploaderDropzone"] div div::after {
+                content: "Arrastra y suelta tu archivo aquí";
+                font-size: 14px;
+                color: #BBBBBB; /* Gris claro */
+                display: block;
+                margin-bottom: 10px;
+                font-weight: 500;
+            }
+
+            /* 3. Ocultamos el texto pequeño de "Limit 200MB..." */
+            [data-testid="stFileUploaderDropzone"] small {
+                display: none;
+            }
+            
+            /* 4. Agregamos nuestro propio texto de límite */
+            [data-testid="stFileUploaderDropzone"] div div::before {
+                content: "Máximo 200MB • PDF, JPG, PNG";
+                font-size: 13px;
+                color: #666;
+                display: block;
+                margin-bottom: 5px;
+            }
+
+            /* 5. TRADUCCIÓN DEL BOTÓN "Browse files" */
+            /* Paso A: Hacemos transparente el texto original */
+            [data-testid="stFileUploaderDropzone"] button {
+                color: transparent !important;
+                position: relative;
+                min-width: 100px; /* Asegura espacio para el nuevo texto */
+            }
+            
+            /* Paso B: Ponemos el texto nuevo encima */
+            [data-testid="stFileUploaderDropzone"] button::after {
+                content: "Explorar";
+                color: #000000 !important; /* Color del texto del botón (negro usu.) */
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 14px;
+                font-weight: 600;
+                width: 100%;
+            }
+            
+            /* Corrección para modo oscuro: si el botón es oscuro, texto blanco */
+            @media (prefers-color-scheme: dark) {
+                [data-testid="stFileUploaderDropzone"] button::after {
+                    color: #FFFFFF !important; /* Si el botón se ve oscuro */
+                }
+            }
+             /* Forzamos texto negro si el botón es blanco (común en tu tema dark mode) */
+             [data-testid="stFileUploaderDropzone"] button {
+                background-color: #FFFFFF !important; 
+             }
+             [data-testid="stFileUploaderDropzone"] button::after {
+                color: #000000 !important;
+             }
 
         </style>
     """, unsafe_allow_html=True)
