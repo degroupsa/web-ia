@@ -1,82 +1,63 @@
 import streamlit as st
-import os  # <--- 1. IMPORTANTE: Necesario para leer variables de Render
+import os  
 from openai import OpenAI
 from tavily import TavilyClient
 import datetime
 from pypdf import PdfReader
 from modules import roles 
 
-# --- MANUAL DE USO DINÁMICO (CEREBRO DE LA IDENTIDAD) ---
+# --- MANUAL DE USO DINÁMICO ---
 def obtener_guia_dinamica(rol_actual):
-    """
-    Define la personalidad y las instrucciones de la interfaz.
-    """
     dict_roles = roles.obtener_tareas()
     nombres_roles = ", ".join(dict_roles.keys())
     
+    # DETECTIVE DE ROLES: SI ESTAMOS EN MODO GENERAL, ACTIVAR AVISO
+    aviso_detective = ""
+    if "General" in rol_actual:
+        aviso_detective = """
+        ⚠️ PROTOCOLO DE EXCELENCIA (MODO GENERAL):
+        Si el usuario pide algo específico (Logo, Contrato, Código), NO te niegues.
+        PERO, DEBES iniciar tu respuesta con este bloque EXACTO para avisarle:
+        
+        > ⚠️ **RECOMENDACIÓN KORTEXA:** He notado que pides una tarea especializada. Para resultados de nivel experto, te sugiero cambiar mi rol en el menú lateral.
+        
+        (Y luego continúa con la tarea normalmente).
+        """
+
     return f"""
-    INSTRUCCIONES DE SISTEMA (KORTEXA AI - DE GROUP):
+    INSTRUCCIONES DEL SISTEMA (KORTEXA AI):
 
-    1. IDENTIDAD Y TONO:
-       - Eres **Kortexa AI**, una inteligencia desarrollada por **DE Group**.
-       - NO eres un modelo de lenguaje genérico; eres una herramienta integrada en esta aplicación específica.
-       - Tu ROL ACTUAL es: "{rol_actual}".
+    {aviso_detective}
+    
+    ⚠️ REGLA SUPREMA: CAPACIDAD VISUAL
+    - TÚ SÍ PUEDES GENERAR IMÁGENES (DALL-E 3).
+    - Si detectas intención visual ("logo", "foto", "diseño"), CONFIRMA LA ACCIÓN.
+    - Ejemplo: "¡Entendido! Estoy creando el diseño ahora mismo..."
 
-    2. TUS ROLES DISPONIBLES:
-       [{nombres_roles}]
+    IDENTIDAD:
+    - Eres Kortexa AI. Rol Actual: "{rol_actual}".
+    - Sé profesional, directo y extremadamente eficiente.
 
-    3. >>> CASO ESPECIAL: PREGUNTA "¿CÓMO FUNCIONAS?" (PRIORIDAD MÁXIMA):
-       Si el usuario pregunta "¿Cómo funcionas?", "¿Qué haces?" o "¿Cómo se usa?", 
-       NO des una lista aburrida. Habla de ti misma integrando la interfaz así:
-       
-       "¡Hola! Soy Kortexa. No soy solo un chat, soy todo este entorno que ves. Déjame guiarte por mi interfaz:
-       
-       🧠 **Mi Cerebro (Menú Roles):**
-       A tu izquierda verás 'Rol del Asistente'. Ahí es donde configuras mi mentalidad. Si me pones en modo 'Abogado', pensaré como tal. ¡Es vital que elijas el experto adecuado para cada tarea!
-       
-       📎 **Mis Herramientas (Menú Desplegable):**
-       En la barra lateral tienes mis 'superpoderes':
-       - **Web:** Enciéndelo para conectarme a Google en tiempo real.
-       - **Arte:** Enciéndelo si quieres que dibuje para ti.
-       - **Subir Archivo:** Dame documentos PDF para leer o imágenes para analizar.
-       
-       Todo esto está diseñado por DE Group para potenciar tu trabajo. ¿Probamos cambiar mi rol o subir un archivo?"
-
-    4. DETECTIVE DE ROLES (ALTA VISIBILIDAD):
-       Si el usuario pide algo complejo (ej: "crear web", "contrato") y tu rol NO es el adecuado:
-       
-       DEBES INICIAR TU RESPUESTA CON ESTE BLOQUE EXACTO (Usa el signo '>' para citar):
-       
-       > ⚠️ **ATENCIÓN: RECOMENDACIÓN DE EXPERTO**
-       > He notado que quieres realizar una tarea específica.
-       > Para obtener un resultado profesional, por favor **cambia mi rol a '[Nombre del Rol Ideal]'** en la barra lateral izquierda.
-       
-       (Luego de este bloque, responde a la pregunta lo mejor que puedas).
+    ROLES DISPONIBLES: [{nombres_roles}]
     """
 
-# --- CLIENTE (HÍBRIDO: RENDER + LOCAL) ---
+# --- CLIENTE ---
 def obtener_cliente():
-    # 1. Intentamos leer la variable de entorno de Render
     api_key = os.environ.get("OPENAI_API_KEY")
-    
-    # 2. Si no existe (estamos en local), usamos st.secrets
     if not api_key:
-        try:
-            api_key = st.secrets["OPENAI_KEY"]
-        except:
-            return None
-
+        try: api_key = st.secrets["OPENAI_KEY"]
+        except: return None
     return OpenAI(api_key=str(api_key))
 
-# --- 1. ROUTER ---
+# --- ROUTER ---
 def decidir_si_buscar(prompt):
     client = obtener_cliente()
-    if not client: return False # Protección si no hay clave
+    if not client: return False
     try:
         res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Responde SI si el usuario pregunta sobre: noticias, clima, hora, precios, eventos recientes. Responde NO si es charla general."},
+                {"role": "system", "content": "Responde SI si pregunta datos actuales/noticias. SI NO, responde NO."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=5, temperature=0
@@ -84,28 +65,72 @@ def decidir_si_buscar(prompt):
         return "SI" in res.choices[0].message.content.strip().upper()
     except: return False
 
-# --- 2. HERRAMIENTAS ---
+# --- HERRAMIENTAS ---
 def analizar_vision(msg, b64_img, rol):
     client = obtener_cliente()
     try:
         res = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"{rol}. Analiza la imagen."},
+                {"role": "system", "content": f"{rol}. Analiza la imagen con detalle extremo."},
                 {"role": "user", "content": [{"type": "text", "text": msg}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}]}
             ]
         )
         return res.choices[0].message.content
     except Exception as e: return f"Error Vision: {e}"
 
-def generar_imagen(prompt, estilo):
+def generar_imagen(prompt_usuario, estilo):
     client = obtener_cliente()
+    
+    # 1. REFINADOR DE PROMPT "AWARD WINNING"
+    try:
+        system_instruction = """
+        ERES UN DIRECTOR DE ARTE EXPERTO EN DALL-E 3.
+        
+        TU MISIÓN: Escribir el prompt visual PERFECTO en INGLÉS.
+        
+        SI EL ESTILO ES 'ADAPTATIVE' (Modo General):
+        - Detecta qué pide el usuario.
+        - Si es LOGO: "Vector logo, minimalist, flat design, white background, clean lines".
+        - Si es FOTO: "Photorealistic, 8k, cinematic lighting".
+        
+        SI EL ESTILO ES ESPECÍFICO (Modo Experto):
+        - Úsalo como base y poténcialo.
+        
+        REGLA DE ORO:
+        - Si el usuario pide un texto, indícalo: "The text 'EJEMPLO' is integrated elegantly".
+        - NO inventes objetos aleatorios. Cíñete al pedido.
+        
+        SALIDA: Solo el prompt técnico en Inglés.
+        """
+        
+        refinado = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": f"Usuario: {prompt_usuario}. Estilo Configurado: {estilo}"}
+            ]
+        )
+        prompt_final = refinado.choices[0].message.content
+
+    except:
+        prompt_final = f"High quality image of {prompt_usuario}, {estilo}"
+
+    # 2. GENERACIÓN
     try:
         res = client.images.generate(
-            model="dall-e-3", prompt=f"ESTILO: {estilo}. DIBUJA: {prompt}", size="1024x1024", quality="hd", style="vivid"
+            model="dall-e-3", 
+            prompt=prompt_final, 
+            size="1024x1024", 
+            quality="hd", 
+            style="vivid"
         )
         return res.data[0].url
-    except Exception as e: return f"Error DALL-E: {e}"
+    except Exception as e:
+        err = str(e).lower()
+        if "safety" in err:
+            return "🛡️ Kortexa Security: La imagen no se pudo generar por políticas de contenido. Intenta suavizar la descripción."
+        return f"⚠️ Error Imagen: {e}"
 
 def leer_pdf(file):
     try:
@@ -115,61 +140,80 @@ def leer_pdf(file):
 
 def buscar_web(query):
     try:
-        # Lógica híbrida también para Tavily
         t_key = os.environ.get("TAVILY_KEY")
         if not t_key:
             try: t_key = st.secrets["TAVILY_KEY"]
-            except: return "Error: Falta API Key de Tavily."
-
+            except: return "Falta API Tavily."
         tavily = TavilyClient(api_key=str(t_key))
         res = tavily.search(query=query, search_depth="advanced")
         return "\n".join([f"- {r['title']}: {r['content']}" for r in res.get('results', [])[:3]])
     except: return "Sin conexión."
 
-# --- 3. PROCESADOR PRINCIPAL ---
+# --- PROCESADOR DE TEXTO (STREAMING) ---
 def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual):
     client = obtener_cliente()
-    if not client: return "⚠️ Error de Configuración: No se detectó la API Key de OpenAI."
+    if not client: 
+        yield "⚠️ Error API Key."
+        return
 
-    ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M UTC")
-    
-    # Auto-piloto
+    ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     usar_busqueda = web_manual
     debug_msg = ""
     if not usar_busqueda and decidir_si_buscar(msg):
         usar_busqueda = True
-        debug_msg = " [🔎 Auto-Web]"
+        debug_msg = " [🔎 Web]"
 
-    # Generamos la guía pasando el rol actual
-    guia_actualizada = obtener_guia_dinamica(nombre_rol_actual)
-
-    # Construcción del Prompt
-    sys_msg = f"{rol_prompt}. FECHA: {ahora}. Objetivo: Ser la mejor IA de DE Group.\n\n{guia_actualizada}"
-    
-    if pdf_ctx: sys_msg += f"\n\nCONTEXTO PDF:\n{pdf_ctx}"
+    guia = obtener_guia_dinamica(nombre_rol_actual)
+    sys_msg = f"{rol_prompt}. FECHA: {ahora}.\n\n{guia}"
+    if pdf_ctx: sys_msg += f"\n\nPDF: {pdf_ctx}"
     
     msgs = [{"role": "system", "content": sys_msg}]
-    
     if usar_busqueda:
         info = buscar_web(msg)
         msgs.append({"role": "system", "content": f"DATOS WEB: {info}"})
     
-    hist_clean = [{"role": m["role"], "content": m["content"]} for m in hist if not m["content"].startswith("http")]
+    hist_clean = []
+    for m in hist:
+        c = str(m["content"])
+        if not c.startswith("http") and "⚠️" not in c and "🛡️" not in c:
+            hist_clean.append({"role": m["role"], "content": c})
+            
     msgs += hist_clean + [{"role": "user", "content": msg}]
     
-    # Usamos gpt-4o (asegúrate que tu cuenta tenga saldo, sino cambia a gpt-3.5-turbo)
-    res = client.chat.completions.create(model="gpt-4o", messages=msgs)
-    return res.choices[0].message.content + debug_msg
+    try:
+        stream = client.chat.completions.create(model="gpt-4o", messages=msgs, stream=True)
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+        if debug_msg: yield debug_msg
+    except Exception as e:
+        yield f"Error: {e}"
 
 def generar_titulo(msg):
-    client = obtener_cliente()
-    if not client: return "Nuevo Chat"
     try:
+        client = obtener_cliente()
         return client.chat.completions.create(
             model="gpt-4o-mini", messages=[{"role":"user", "content":f"Título 3 palabras: {msg}"}], max_tokens=10
         ).choices[0].message.content.strip()
     except: return "Nuevo Chat"
 
+# --- DETECTOR DE INTENCIÓN VISUAL ---
 def detectar_intencion_imagen(prompt):
-    keywords = ["generar imagen", "crear imagen", "dibuja", "dibújame", "foto de", "imagen de"]
-    return any(k in prompt.lower() for k in keywords)
+    p = prompt.lower().strip()
+    frases = [
+        "un logo", "el logo", "diseño de logo", "crear logo", 
+        "una imagen", "la imagen", "crear imagen", "generar imagen",
+        "una foto", "la foto", "foto de",
+        "un flyer", "un banner", "un boceto", 
+        "opciones visuales", "ejemplos visuales", "muestrame opciones",
+        "dame opciones", "pasame opciones"
+    ]
+    if any(f in p for f in frases): return True
+    
+    verbos = ["gener", "crea", "hac", "diseñ", "muestr", "da", "quier", "pasa", "ver"]
+    objetos = ["imagen", "logo", "foto", "flyer", "icono", "boceto", "diseño", "opcion"]
+
+    tiene_verbo = any(v in p for v in verbos)
+    tiene_objeto = any(o in p for o in objetos)
+    
+    return tiene_verbo and tiene_objeto

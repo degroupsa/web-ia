@@ -1,3 +1,4 @@
+import streamlit.components.v1 as components
 import streamlit as st
 from modules import database as db
 from modules import roles
@@ -134,18 +135,22 @@ def render_sidebar():
             
             # --- PERFIL ---
             inicial = st.session_state.usuario[0].upper()
-            st.markdown(f"""
-                <div class="user-profile-compact">
-                    <div class="user-avatar">{inicial}</div>
-                    <div class="user-info">
-                        <span class="user-name">{st.session_state.usuario}</span>
-                        <span class="user-role">Plan Enterprise</span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
+            # BOTÓN NUEVO CHAT CON CIERRE AUTOMÁTICO DE SIDEBAR
             if st.button("📁 Nuevo Chat", type="primary", use_container_width=True):
                 st.session_state.chat_id = None
+                
+                # TRUCO JS: Cierra el sidebar en móviles
+                js = '''
+                <script>
+                    var sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
+                    if (sidebar) {
+                        // Busca el botón de colapsar (suele ser el primero svg clickable en el header)
+                        var closeBtn = window.parent.document.querySelector('button[data-testid="baseButton-header"]');
+                        if (closeBtn) { closeBtn.click(); }
+                    }
+                </script>
+                '''
+                st.components.v1.html(js, height=0, width=0)
                 st.rerun()
 
             st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -161,7 +166,7 @@ def render_sidebar():
             
             rol = st.selectbox("Rol Seleccionado:", list(tareas.keys()), index=idx, on_change=reset)
             
-            with st.expander("📤​ Cargar Archivo"):
+            with st.expander("🛠️​​ Herramientas"):
                 web = st.toggle("Búsqueda Web", value=True)
                 img = st.toggle("Generar Imágenes")
                 up = st.file_uploader("Adjuntar Archivos", label_visibility="collapsed")

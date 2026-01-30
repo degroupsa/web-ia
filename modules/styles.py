@@ -343,6 +343,43 @@ def cargar_css():
              [data-testid="stFileUploaderDropzone"] button::after {
                 color: #000000 !important;
              }
+                
+            /* =========================================
+               12. MEJORAS EN CAMPOS DE TEXTO (LOGIN)
+               ========================================= */
+            
+            /* 1. CAMBIAR FONDO Y BORDE DE LOS INPUTS EN EL SIDEBAR */
+            [data-testid="stSidebar"] input {
+                background-color: #222222 !important; 
+                border: 1px solid #444444 !important;
+                color: #FFFFFF !important;
+            }
+            
+            /* Color del placeholder */
+            [data-testid="stSidebar"] input::placeholder {
+                color: #888888 !important;
+            }
+
+            /* 2. ELIMINAR EL TEXTO "Press Enter..." (SOLUCIÓN DEFINITIVA) */
+            
+            /* Opción A: Selector oficial de instrucciones */
+            [data-testid="InputInstructions"] {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            /* Opción B: Refuerzo para capturar el contenedor del texto */
+            [data-testid="stForm"] div[data-baseweb="block"] {
+                display: none !important;
+            }
+            
+            /* Opción C: Ocultar cualquier div pequeño debajo del input dentro del form */
+            div[data-testid="stForm"] div[data-baseweb="input"] + div {
+                 display: none !important;
+            }
 
         </style>
     """, unsafe_allow_html=True)
