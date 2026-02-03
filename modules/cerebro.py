@@ -6,41 +6,6 @@ import datetime
 from pypdf import PdfReader
 from modules import roles 
 
-# --- MANUAL DE USO DINÁMICO ---
-def obtener_guia_dinamica(rol_actual):
-    dict_roles = roles.obtener_tareas()
-    nombres_roles = ", ".join(dict_roles.keys())
-    
-    # DETECTIVE DE ROLES: SI ESTAMOS EN MODO GENERAL, ACTIVAR AVISO
-    aviso_detective = ""
-    if "General" in rol_actual:
-        aviso_detective = """
-        ⚠️ PROTOCOLO DE EXCELENCIA (MODO GENERAL):
-        Si el usuario pide algo específico (Logo, Contrato, Código), NO te niegues.
-        PERO, DEBES iniciar tu respuesta con este bloque EXACTO para avisarle:
-        
-        > ⚠️ **RECOMENDACIÓN KORTEXA:** He notado que pides una tarea especializada. Para resultados de nivel experto, te sugiero cambiar mi rol en el menú lateral.
-        
-        (Y luego continúa con la tarea normalmente).
-        """
-
-    return f"""
-    INSTRUCCIONES DEL SISTEMA (KORTEXA AI):
-
-    {aviso_detective}
-    
-    ⚠️ REGLA SUPREMA: CAPACIDAD VISUAL
-    - TÚ SÍ PUEDES GENERAR IMÁGENES (DALL-E 3).
-    - Si detectas intención visual ("logo", "foto", "diseño"), CONFIRMA LA ACCIÓN.
-    - Ejemplo: "¡Entendido! Estoy creando el diseño ahora mismo..."
-
-    IDENTIDAD:
-    - Eres Kortexa AI. Rol Actual: "{rol_actual}".
-    - Sé profesional, directo y extremadamente eficiente.
-
-    ROLES DISPONIBLES: [{nombres_roles}]
-    """
-
 # --- CLIENTE ---
 def obtener_cliente():
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -49,21 +14,119 @@ def obtener_cliente():
         except: return None
     return OpenAI(api_key=str(api_key))
 
-# --- ROUTER ---
-def decidir_si_buscar(prompt):
-    client = obtener_cliente()
-    if not client: return False
-    try:
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Responde SI si pregunta datos actuales/noticias. SI NO, responde NO."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=5, temperature=0
-        )
-        return "SI" in res.choices[0].message.content.strip().upper()
-    except: return False
+# --- MANUAL DE USO DINÁMICO ---
+def obtener_guia_dinamica(rol_actual):
+    # Lógica de advertencia si estamos en modo general
+    advertencia_contexto = ""
+    if "General" in rol_actual:
+        advertencia_contexto = """
+        IMPORTANTE - DETECCIÓN DE ROL:
+        Estás en modo 'Asistente General'.
+        - Si el usuario te pide una tarea altamente especializada (ej: diseñar un logo profesional, redactar un contrato legal, auditar código complejo):
+          NO te niegues a hacerlo. HAZLO, pero OBLIGATORIAMENTE inicia tu respuesta con este bloque de advertencia:
+          
+          > ⚠️ **RECOMENDACIÓN:** Para un resultado de nivel experto en esta tarea, te sugiero cambiar al rol especializado correspondiente desde el menú o pidiéndomelo (ej: "Actúa como Diseñador").
+          
+          ---
+        """
+
+    return f"""
+    SISTEMA KORTEXA AI.
+    ROL ACTUAL: {rol_actual}.
+    
+    {advertencia_contexto}
+
+    CAPACIDADES ACTIVAS:
+    1. GENERACIÓN DE IMÁGENES (DALL-E 3): Si el usuario pide imagen, HAZLA.
+    2. GENERACIÓN DE APPS (HTML): Si pide una app/juego, genera el código HTML completo.
+    3. CAMBIO DE ROL: Si el usuario pide explícitamente "actúa como abogado" o "cambia a modo X", CONFIRMA el cambio verbalmente.
+    """
+
+# --- DETECTOR DE CAMBIO DE ROL ---
+def detectar_cambio_rol(prompt):
+    """
+    Analiza si el usuario quiere cambiar de personalidad explícitamente.
+    Devuelve la CLAVE del rol en el diccionario roles.py o None.
+    """
+    p = prompt.lower()
+    
+    # Mapeo exhaustivo de palabras clave a las claves EXACTAS de roles.py
+    mapa_roles = {
+        "abogado": "Abogado Consultor",
+        "legal": "Abogado Consultor",
+        "leyes": "Abogado Consultor",
+        "programador": "Programador Senior (Vision)",
+        "codigo": "Programador Senior (Vision)",
+        "dev": "Programador Senior (Vision)",
+        "diseñador": "Diseñador de Logos Pro",
+        "diseño": "Diseñador de Logos Pro",
+        "logo": "Diseñador de Logos Pro",
+        "foto": "Fotografía Hiperrealista",
+        "fotografo": "Fotografía Hiperrealista",
+        "marketing": "Copywriter PRO (Ventas)",
+        "copywriter": "Copywriter PRO (Ventas)",
+        "general": "Asistente General (Multimodal)",
+        "normal": "Asistente General (Multimodal)",
+        "asistente": "Asistente General (Multimodal)",
+        "ingles": "Profesor de Inglés",
+        "idiomas": "Profesor de Inglés",
+        "chef": "Chef (Análisis de Heladera)",
+        "cocina": "Chef (Análisis de Heladera)",
+        "entrenador": "Entrenador Personal (Gym)",
+        "fitness": "Entrenador Personal (Gym)",
+        "psicologo": "Psicólogo / Coach Motivacional",
+        "coach": "Psicólogo / Coach Motivacional",
+        "viajes": "Guía de Viajes",
+        "turismo": "Guía de Viajes",
+        "traductor": "Traductor Universal",
+        "excel": "Experto en Excel",
+        "mobile": "Desarrollador de Apps Móviles",
+        "app": "Desarrollador de Apps Móviles",
+        "hacker": "Hacker Ético / Ciberseguridad",
+        "seguridad": "Hacker Ético / Ciberseguridad",
+        "arquitecto": "Arquitecto de Software",
+        "interiores": "Diseño de Interiores 3D",
+        "decoracion": "Diseño de Interiores 3D",
+        "anime": "Ilustrador Anime / Manga",
+        "manga": "Ilustrador Anime / Manga",
+        "tatuaje": "Diseñador de Tatuajes",
+        "moda": "Diseño de Moda y Ropa",
+        "ropa": "Diseño de Moda y Ropa",
+        "instagram": "Experto en Instagram (Reels/Post)",
+        "redes": "Experto en Instagram (Reels/Post)",
+        "tiktok": "Guionista de TikTok Viral",
+        "ads": "Copywriter de Anuncios (Ads)",
+        "anuncio": "Copywriter de Anuncios (Ads)",
+        "seo": "Especialista SEO (Blogs)",
+        "community": "Community Manager",
+        "naming": "Creador de Nombres (Naming)",
+        "nombre": "Creador de Nombres (Naming)",
+        "python": "Experto en Python y Datos",
+        "datos": "Experto en Python y Datos",
+        "negocios": "Consultor de Negocios",
+        "empresa": "Consultor de Negocios",
+        "pdf": "Analista de Documentos (PDF)",
+        "documento": "Analista de Documentos (PDF)",
+        "reclutador": "Reclutador / Mejorar CV",
+        "cv": "Reclutador / Mejorar CV",
+        "email": "Redactor de Correos",
+        "correo": "Redactor de Correos",
+        "product manager": "Product Manager (PM)",
+        "pm": "Product Manager (PM)",
+        "ux": "UX Writer / UX Designer",
+        "metrics": "Analista de Métricas y KPIs",
+        "kpi": "Analista de Métricas y KPIs",
+        "prompt engineer": "Prompt Engineer"
+    }
+
+    # Frases gatillo para cambio de rol
+    triggers = ["actua como", "cambia a", "cambia tu rol a", "ponte en modo", "se un", "sé un", "modo", "quiero hablar con el"]
+    
+    if any(t in p for t in triggers):
+        for key, rol_name in mapa_roles.items():
+            if key in p:
+                return rol_name
+    return None
 
 # --- HERRAMIENTAS ---
 def analizar_vision(msg, b64_img, rol):
@@ -72,7 +135,7 @@ def analizar_vision(msg, b64_img, rol):
         res = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"{rol}. Analiza la imagen con detalle extremo."},
+                {"role": "system", "content": f"{rol}. Analiza la imagen."},
                 {"role": "user", "content": [{"type": "text", "text": msg}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}]}
             ]
         )
@@ -82,39 +145,28 @@ def analizar_vision(msg, b64_img, rol):
 def generar_imagen(prompt_usuario, estilo):
     client = obtener_cliente()
     
-    # 1. REFINADOR DE PROMPT "AWARD WINNING"
+    # 1. REFINADOR "ESPEJO" (LITERAL)
     try:
         system_instruction = """
-        ERES UN DIRECTOR DE ARTE EXPERTO EN DALL-E 3.
+        ERES UN TRADUCTOR LITERAL DE PROMPTS PARA DALL-E.
         
-        TU MISIÓN: Escribir el prompt visual PERFECTO en INGLÉS.
+        INSTRUCCIONES:
+        1. NO agregues estilos "futuristas" ni "neón" a menos que el usuario lo pida explícitamente.
+        2. APEGO TOTAL al pedido del usuario. Si pide algo simple, el prompt debe ser simple.
         
-        SI EL ESTILO ES 'ADAPTATIVE' (Modo General):
-        - Detecta qué pide el usuario.
-        - Si es LOGO: "Vector logo, minimalist, flat design, white background, clean lines".
-        - Si es FOTO: "Photorealistic, 8k, cinematic lighting".
-        
-        SI EL ESTILO ES ESPECÍFICO (Modo Experto):
-        - Úsalo como base y poténcialo.
-        
-        REGLA DE ORO:
-        - Si el usuario pide un texto, indícalo: "The text 'EJEMPLO' is integrated elegantly".
-        - NO inventes objetos aleatorios. Cíñete al pedido.
-        
-        SALIDA: Solo el prompt técnico en Inglés.
+        Devuelve SOLO el prompt en Inglés.
         """
         
         refinado = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_instruction},
-                {"role": "user", "content": f"Usuario: {prompt_usuario}. Estilo Configurado: {estilo}"}
+                {"role": "user", "content": f"Usuario: {prompt_usuario}. Contexto de estilo sugerido (ignorar si el usuario pide otro): {estilo}"}
             ]
         )
         prompt_final = refinado.choices[0].message.content
-
     except:
-        prompt_final = f"High quality image of {prompt_usuario}, {estilo}"
+        prompt_final = prompt_usuario # Fallback directo
 
     # 2. GENERACIÓN
     try:
@@ -122,15 +174,13 @@ def generar_imagen(prompt_usuario, estilo):
             model="dall-e-3", 
             prompt=prompt_final, 
             size="1024x1024", 
-            quality="hd", 
+            quality="standard", 
             style="vivid"
         )
         return res.data[0].url
     except Exception as e:
-        err = str(e).lower()
-        if "safety" in err:
-            return "🛡️ Kortexa Security: La imagen no se pudo generar por políticas de contenido. Intenta suavizar la descripción."
-        return f"⚠️ Error Imagen: {e}"
+        if "safety" in str(e).lower(): return "🛡️ Error de seguridad en la imagen."
+        return f"⚠️ Error: {e}"
 
 def leer_pdf(file):
     try:
@@ -140,10 +190,7 @@ def leer_pdf(file):
 
 def buscar_web(query):
     try:
-        t_key = os.environ.get("TAVILY_KEY")
-        if not t_key:
-            try: t_key = st.secrets["TAVILY_KEY"]
-            except: return "Falta API Tavily."
+        t_key = os.environ.get("TAVILY_KEY") or st.secrets["TAVILY_KEY"]
         tavily = TavilyClient(api_key=str(t_key))
         res = tavily.search(query=query, search_depth="advanced")
         return "\n".join([f"- {r['title']}: {r['content']}" for r in res.get('results', [])[:3]])
@@ -157,9 +204,11 @@ def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual
         return
 
     ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    # Auto-Search logic simplificada
     usar_busqueda = web_manual
     debug_msg = ""
-    if not usar_busqueda and decidir_si_buscar(msg):
+    if not usar_busqueda and ("precio" in msg.lower() or "noticia" in msg.lower() or "clima" in msg.lower()):
         usar_busqueda = True
         debug_msg = " [🔎 Web]"
 
@@ -172,12 +221,8 @@ def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual
         info = buscar_web(msg)
         msgs.append({"role": "system", "content": f"DATOS WEB: {info}"})
     
-    hist_clean = []
-    for m in hist:
-        c = str(m["content"])
-        if not c.startswith("http") and "⚠️" not in c and "🛡️" not in c:
-            hist_clean.append({"role": m["role"], "content": c})
-            
+    # Limpiamos historial
+    hist_clean = [m for m in hist if not str(m["content"]).startswith("http")]
     msgs += hist_clean + [{"role": "user", "content": msg}]
     
     try:
@@ -191,8 +236,7 @@ def procesar_texto(msg, hist, rol_prompt, web_manual, pdf_ctx, nombre_rol_actual
 
 def generar_titulo(msg):
     try:
-        client = obtener_cliente()
-        return client.chat.completions.create(
+        return obtener_cliente().chat.completions.create(
             model="gpt-4o-mini", messages=[{"role":"user", "content":f"Título 3 palabras: {msg}"}], max_tokens=10
         ).choices[0].message.content.strip()
     except: return "Nuevo Chat"
@@ -200,20 +244,8 @@ def generar_titulo(msg):
 # --- DETECTOR DE INTENCIÓN VISUAL ---
 def detectar_intencion_imagen(prompt):
     p = prompt.lower().strip()
-    frases = [
-        "un logo", "el logo", "diseño de logo", "crear logo", 
-        "una imagen", "la imagen", "crear imagen", "generar imagen",
-        "una foto", "la foto", "foto de",
-        "un flyer", "un banner", "un boceto", 
-        "opciones visuales", "ejemplos visuales", "muestrame opciones",
-        "dame opciones", "pasame opciones"
-    ]
-    if any(f in p for f in frases): return True
-    
-    verbos = ["gener", "crea", "hac", "diseñ", "muestr", "da", "quier", "pasa", "ver"]
+    directos = ["un logo", "el logo", "crear logo", "una imagen", "la imagen", "generar imagen", "una foto", "un flyer", "opciones visuales"]
+    if any(f in p for f in directos): return True
+    verbos = ["gener", "crea", "hac", "diseñ", "muestr", "dame", "quier", "pasa", "ver"]
     objetos = ["imagen", "logo", "foto", "flyer", "icono", "boceto", "diseño", "opcion"]
-
-    tiene_verbo = any(v in p for v in verbos)
-    tiene_objeto = any(o in p for o in objetos)
-    
-    return tiene_verbo and tiene_objeto
+    return any(v in p for v in verbos) and any(o in p for o in objetos)
