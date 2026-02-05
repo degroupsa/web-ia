@@ -6,7 +6,8 @@ import streamlit as st
 # ==========================================
 # 🔑 CONFIGURACIÓN DE GEMINI
 # ==========================================
-GEMINI_API_KEY = "AIzaSyCi0nXWreFloqaqB_QSt3iQeVgDmHwofmM" 
+# En lugar de pegar el texto, leemos el secreto
+GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)

@@ -1,43 +1,61 @@
 import pandas as pd
-from pypdf import PdfReader
+import PyPDF2
 import io
 
 def procesar_archivo(uploaded_file):
     """
-    Recibe un archivo de Streamlit (UploadedFile) y extrae su texto.
-    Soporta: PDF, CSV, TXT, XLSX.
+    Detecta el tipo de archivo (PDF, CSV, Excel, TXT) y extrae su texto
+    para que Kortexa pueda analizarlo.
     """
     if uploaded_file is None:
         return ""
-    
-    nombre = uploaded_file.name.lower()
-    texto_extraido = ""
 
     try:
-        # 1. Procesar PDF 📕
+        # Obtener extensión y nombre
+        nombre = uploaded_file.name.lower()
+        texto_extraido = ""
+
+        # CASO 1: PDF
         if nombre.endswith(".pdf"):
-            reader = PdfReader(uploaded_file)
+            reader = PyPDF2.PdfReader(uploaded_file)
             for page in reader.pages:
-                texto_extraido += page.extract_text() + "\n"
-        
-        # 2. Procesar Excel (XLSX, XLS) 📊
-        elif nombre.endswith(".xlsx") or nombre.endswith(".xls"):
-            df = pd.read_excel(uploaded_file)
-            # Convertimos a CSV string para que la IA entienda la estructura
-            texto_extraido = df.to_csv(index=False)
+                texto_page = page.extract_text()
+                if texto_page:
+                    texto_extraido += texto_page + "\n"
             
-        # 3. Procesar CSV 📋
+            return f"\n\n[SISTEMA: Contenido del archivo PDF '{uploaded_file.name}']:\n{texto_extraido}\n[FIN ARCHIVO]\n"
+
+        # CASO 2: EXCEL (.xlsx)
+        elif nombre.endswith(".xlsx") or nombre.endswith(".xls"):
+            # Leemos el Excel
+            df = pd.read_excel(uploaded_file)
+            # Convertimos a formato CSV (texto) para que la IA lo entienda mejor
+            texto_datos = df.to_string(index=False)
+            
+            # Limitamos por seguridad (si es gigante, cortamos para no saturar)
+            if len(texto_datos) > 50000:
+                texto_datos = texto_datos[:50000] + "\n... [Datos truncados por longitud] ..."
+                
+            return f"\n\n[SISTEMA: Contenido del archivo Excel '{uploaded_file.name}']:\n{texto_datos}\n[FIN ARCHIVO]\n"
+
+        # CASO 3: CSV
         elif nombre.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
-            texto_extraido = df.to_csv(index=False)
+            texto_datos = df.to_string(index=False)
             
-        # 4. Procesar Texto Plano / Codigo (TXT, PY, MD) 📝
-        else:
-            # Intentamos leer como utf-8
+            if len(texto_datos) > 50000:
+                texto_datos = texto_datos[:50000] + "\n... [Datos truncados] ..."
+                
+            return f"\n\n[SISTEMA: Contenido del archivo CSV '{uploaded_file.name}']:\n{texto_datos}\n[FIN ARCHIVO]\n"
+
+        # CASO 4: TXT / MD / PY
+        elif nombre.endswith(".txt") or nombre.endswith(".md") or nombre.endswith(".py"):
             stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
             texto_extraido = stringio.read()
+            return f"\n\n[SISTEMA: Contenido del archivo de texto '{uploaded_file.name}']:\n{texto_extraido}\n[FIN ARCHIVO]\n"
 
-        return f"\n\n[CONTENIDO DEL ARCHIVO ADJUNTO '{uploaded_file.name}']:\n{texto_extraido}\n[FIN DEL ARCHIVO]\n"
+        else:
+            return f"\n[SISTEMA: Archivo '{uploaded_file.name}' cargado, pero el formato no es texto legible directo.]"
 
     except Exception as e:
-        return f"\n[ERROR LEYENDO ARCHIVO: {str(e)}]\n"
+        return f"\n[ERROR LEYENDO ARCHIVO: {str(e)}]"

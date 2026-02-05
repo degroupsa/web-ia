@@ -6,6 +6,6 @@ firebase-admin>=6.5.0
 requests
 pandas
 openpyxl
-pypdf
+PyPDF2
 watchdog
 # tavily-python  <-- Descomentar solo si vas a configurar la API de Tavily para búsquedas
