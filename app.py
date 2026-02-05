@@ -1,237 +1,214 @@
 import streamlit as st
-import streamlit.components.v1 as components
-import base64
-import os
-import shutil
+import time
 import re
-from modules import database as db
 from modules import cerebro
-from modules import ui
-from modules import google_auth
-from modules import roles
+from modules import database as db
+from modules import ui 
+from modules import roles 
+from modules import auth_firebase as auth
+from modules import files 
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Kortexa AI", page_icon="icon.png", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Kortexa AI", page_icon="icon.png", layout="wide")
 
-# --- CSS PERSONALIZADO ---
+# --- ESTILOS CSS GLOBALES ---
 st.markdown("""
-    <style>
-        header {visibility: hidden;}
-        /* Estilo para el Badge del Rol */
-        .role-badge {
-            background-color: #1E1E1E;
-            color: #FF5F1F;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-            border: 1px solid #FF5F1F;
-            margin-bottom: 10px;
-            display: inline-block;
-            font-weight: bold;
-        }
-        /* Estilo para la CAJA DE ALERTA DE ROL (Advertencias) */
-        [data-testid="stChatMessageContent"] blockquote {
-            background-color: rgba(255, 193, 7, 0.15) !important;
-            border-left: 4px solid #FFC107 !important;
-            padding: 15px !important;
-            border-radius: 4px !important;
-            margin-bottom: 20px !important;
-        }
-        [data-testid="stChatMessageContent"] blockquote p {
-            color: #FFC107 !important;
-            font-weight: bold !important;
-            font-size: 15px !important;
-        }
-    </style>
+<style>
+    /* 1. OCULTAR HEADER DE STREAMLIT (Hamburguesa) */
+    header {visibility: hidden;}
+    
+    /* 2. LÍNEA SUPERIOR DEGRADADA (NUEVO) */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px; /* Grosor de la línea */
+        background: linear-gradient(90deg, #FF5F1F, #FFAA00); /* Degradado Kortexa */
+        z-index: 999999; /* Para que quede por encima de todo */
+        box-shadow: 0 0 10px rgba(255, 95, 31, 0.5); /* Resplandor */
+    }
+
+    /* 3. ESTILO DE BADGE DE ROL */
+    .role-badge {
+        background: linear-gradient(90deg, #1E1E1E 0%, #2b2b2b 100%);
+        color: #FF5F1F; padding: 6px 12px; border-radius: 20px;
+        font-size: 0.8rem; border: 1px solid #FF5F1F; display: inline-flex;
+        align-items: center; gap: 5px; font-weight: bold; margin-bottom: 10px;
+    }
+
+    /* 4. ANIMACIÓN DE CARGA (SPINNER) */
+    .kortexa-loader {
+        border: 4px solid #333; 
+        border-top: 4px solid #FF5F1F; 
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 10px;
+    }
+    .loading-text {
+        color: #ccc;
+        font-style: italic;
+        vertical-align: middle;
+        font-size: 0.95rem;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# --- AUTO-REPARACIÓN SECRETS ---
-try:
-    if not os.path.exists(".streamlit"):
-        os.makedirs(".streamlit", exist_ok=True)
-    if os.path.exists("/etc/secrets/secrets.toml") and not os.path.exists(".streamlit/secrets.toml"):
-        shutil.copy("/etc/secrets/secrets.toml", ".streamlit/secrets.toml")
-except:
-    pass
+# --- GESTIÓN DE ESTADO ---
+if "user_token" not in st.session_state: st.session_state.user_token = None
+if "usuario" not in st.session_state: st.session_state.usuario = None
+if "chat_id" not in st.session_state: st.session_state.chat_id = None
+if "rol_actual" not in st.session_state: st.session_state.rol_actual = "Asistente General (Multimodal)"
 
-# --- SESSION STATE ---
-if "user_token" in st.query_params and "usuario" not in st.session_state:
-    st.session_state.usuario = st.query_params["user_token"]
-elif "usuario" not in st.session_state:
-    st.session_state.usuario = None
+# --- PERSISTENCIA ---
+if not st.session_state.usuario:
+    params = st.query_params
+    token_url = params.get("user_token", None)
+    if token_url:
+        st.session_state.usuario = token_url
+        st.session_state.user_token = token_url 
 
-if "chat_id" not in st.session_state:
-    st.session_state.chat_id = None
-
-# Inicializamos el rol si no existe
-if "rol_actual" not in st.session_state:
-    st.session_state.rol_actual = "Asistente General (Multimodal)"
-
-# --- GOOGLE LOGIN ---
-if "code" in st.query_params:
-    if not st.session_state.usuario:
-        code = st.query_params["code"]
-        user_info = google_auth.get_user_info(code)
-        if user_info:
-            email, nombre = user_info.get("email"), user_info.get("name")
-            if db.login_google(email, nombre):
-                st.session_state.usuario = email
-                st.query_params.clear()
-                st.query_params["user_token"] = email
-                st.rerun()
-
-# --- RENDER SIDEBAR ---
-# Nota: La UI del sidebar es prioritaria si el usuario interactúa con ella,
-# pero si la IA cambia el rol, debemos respetarlo.
+# ==========================================
+# 🖥️ UI RENDER
+# ==========================================
 res_sidebar = ui.render_sidebar()
-if res_sidebar[0] is None:
-    st.stop()
+rol_seleccionado, usar_web, usar_img, archivo_adjunto, diccionario_tareas = res_sidebar
 
-rol_sidebar, web_mode, img_mode_manual, up_file, tareas_dict = res_sidebar
+if rol_seleccionado is None: st.stop() 
 
-# --- SINCRONIZACIÓN DE ROL ---
-# Detectamos si el usuario cambió manualmente el sidebar
-if "last_sidebar_rol" not in st.session_state:
-    st.session_state.last_sidebar_rol = rol_sidebar
+# ==========================================
+# 🚀 LÓGICA
+# ==========================================
+if rol_seleccionado != st.session_state.rol_actual:
+    st.session_state.rol_actual = rol_seleccionado
 
-if rol_sidebar != st.session_state.last_sidebar_rol:
-    # Cambio manual por usuario: actualizamos el estado global
-    st.session_state.rol_actual = rol_sidebar
-    st.session_state.last_sidebar_rol = rol_sidebar
+tareas_dict = roles.obtener_tareas()
+info_rol = tareas_dict.get(st.session_state.rol_actual, tareas_dict.get("Asistente General (Multimodal)"))
 
-# El rol activo final es el que está en session_state (ya sea por sidebar o por IA)
-rol_activo = st.session_state.rol_actual
+st.subheader(f"{info_rol.get('icon','')} {info_rol.get('title', st.session_state.rol_actual)}")
+st.markdown(f'<div class="role-badge">MODO: {st.session_state.rol_actual.upper()}</div>', unsafe_allow_html=True)
 
-# Validación de seguridad por si el rol no existe
-if rol_activo not in tareas_dict:
-    rol_activo = "Asistente General (Multimodal)"
-    st.session_state.rol_actual = rol_activo
-
-info_rol = tareas_dict[rol_activo]
-
-# --- HEADER ---
-st.subheader(f"{info_rol.get('icon','🔗')} {info_rol.get('title', rol_activo)}")
-st.markdown(f'<div class="role-badge">MODO ACTUAL: {rol_activo.upper()}</div>', unsafe_allow_html=True)
-
-# --- ARCHIVOS ---
-ctx_pdf, img_vision = None, None
-if up_file:
-    if up_file.type == "application/pdf":
-        with st.spinner("📄 Analizando documento..."):
-            ctx_pdf = cerebro.leer_pdf(up_file)
+def mostrar_mensaje(contenido):
+    # Renderizado inteligente de imágenes
+    imagen_match = re.search(r"!\[.*?\]\((.*?)\)", contenido)
+    if imagen_match:
+        url = imagen_match.group(1)
+        url = url.split(" ")[0] 
+        st.image(url, width=500) 
     else:
-        img_vision = base64.b64encode(up_file.getvalue()).decode("utf-8")
+        st.markdown(contenido)
 
-# --- HISTORIAL ---
-if st.session_state.usuario:
-    msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id) or [] if st.session_state.chat_id else []
-else:
-    msgs = []
-
-if not msgs and not st.session_state.chat_id:
-    ui.render_welcome_screen(info_rol["desc"])
-else:
-    ui.render_mini_header()
+# Cargar Historial
+msgs = db.cargar_msgs(st.session_state.usuario, st.session_state.chat_id)
+if not msgs: ui.render_welcome_screen(info_rol["desc"])
 
 for m in msgs:
-    with st.chat_message(m["role"], avatar="👤" if m["role"] == "user" else "icon.png"):
-        st.markdown(m["content"])
+    with st.chat_message(m["role"], avatar="icon.png" if m["role"] == "assistant" else "👤"):
+        mostrar_mensaje(m["content"])
 
-# --- CHAT INPUT ---
-prompt = st.chat_input("Escribe tu mensaje aquí..")
+# INPUT
+prompt = st.chat_input("Escribe tu mensaje...")
 
 if prompt:
-    # Mensaje usuario
-    with st.chat_message("user", avatar="👤"):
+    # 1. Mostrar usuario
+    with st.chat_message("user", avatar="👤"): 
+        if archivo_adjunto: st.markdown(f"📎 *Archivo: {archivo_adjunto.name}*")
         st.markdown(prompt)
-
-    nuevo_chat = False
+    
+    # 2. Crear sesión
+    first_msg = False
     if not st.session_state.chat_id:
-        nuevo_chat = True
-        st.session_state.chat_id = db.crear_sesion(
-            st.session_state.usuario,
-            rol_activo,
-            cerebro.generar_titulo(prompt)
-        )
-
+        st.session_state.chat_id = db.crear_sesion(st.session_state.usuario, st.session_state.rol_actual, prompt[:30])
+        first_msg = True 
+        
     db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "user", prompt)
 
-    # ============================
-    # 🕵️ DETECCIÓN DE CAMBIO DE ROL AUTOMÁTICO
-    # ============================
-    # Verificamos si el usuario pide explícitamente cambiar de rol (ej: "Actúa como abogado")
-    nuevo_rol_ia = cerebro.detectar_cambio_rol(prompt)
-
-    if nuevo_rol_ia and nuevo_rol_ia != rol_activo:
-        # ¡CAMBIO DETECTADO!
-        st.session_state.rol_actual = nuevo_rol_ia
-        
-        # Mostramos mensaje de transición
-        with st.chat_message("assistant", avatar="icon.png"):
-            aviso = f"🔄 **Entendido. Cambiando mi configuración a: {nuevo_rol_ia}...**"
-            st.markdown(aviso)
-            db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", aviso)
-        
-        # Recargamos la app para que el nuevo rol tome control total (prompts, estilos, etc.)
-        st.rerun()
-
-    # ============================
-    # RESPUESTA ASISTENTE (Si no hubo cambio de rol)
-    # ============================
+    # 3. Respuesta IA
     with st.chat_message("assistant", avatar="icon.png"):
+        container = st.empty()
+        full_resp = ""
+        imagen_generada = False 
 
-        es_intencion_imagen = cerebro.detectar_intencion_imagen(prompt)
+        # --- ANIMACIÓN DE CARGA CON BRANDING ---
+        texto_estado = "Procesando solicitud..."
+        if usar_img: 
+            # ¡AQUÍ ESTÁ EL NOMBRE QUE PEDISTE!
+            texto_estado = "🎨 Kortexa Art Studio está diseñando..."
+        elif archivo_adjunto: 
+            texto_estado = "Analizando documento adjunto..."
+        else: 
+            texto_estado = "Kortexa Neural v3.0 pensando..."
 
-        if img_vision:
-            with st.spinner("👁️ Analizando imagen..."):
-                resp_text = cerebro.analizar_vision(prompt, img_vision, info_rol["prompt"])
-                st.markdown(resp_text)
-                db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", resp_text)
-        else:
-            with st.spinner(f"Kortexa ({rol_activo}) está trabajando..."):
-                stream = cerebro.procesar_texto(
-                    prompt, msgs or [], info_rol["prompt"], web_mode, ctx_pdf, rol_activo
-                )
-                resp_text = st.write_stream(stream)
+        html_loader = f"""
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <div class="kortexa-loader"></div>
+            <div class="loading-text">{texto_estado}</div>
+        </div>
+        """
+        container.markdown(html_loader, unsafe_allow_html=True)
+        time.sleep(0.25) 
+        # --------------------------
 
-            contenido_final = resp_text
+        # Contexto
+        contexto_sistema = ""
+        if archivo_adjunto and not usar_img:
+            texto_archivo = files.procesar_archivo(archivo_adjunto)
+            contexto_sistema += texto_archivo
+        
+        if usar_web and not usar_img: 
+            contexto_sistema += "\n[SISTEMA: Búsqueda Web DISPONIBLE.]"
 
-            # Renderizado de Apps HTML
-            patron_html = r"```html(.*?)```"
-            bloques_html = re.findall(patron_html, resp_text, re.DOTALL)
+        mensaje_con_contexto = prompt + contexto_sistema
 
-            if bloques_html:
-                for codigo_html in bloques_html:
-                    st.caption("⚡ Kortexa App Engine")
-                    components.html(codigo_html, height=400, scrolling=True)
-
-            # Generación de Imagen
-            if es_intencion_imagen or img_mode_manual:
-                st.markdown("---")
-                with st.spinner("🎨 Diseñando..."):
-                    url_img = cerebro.generar_imagen(prompt, info_rol["image_style"])
-                    if "http" in url_img:
-                        st.image(url_img, width=400)
-                        contenido_final += f"\n\n![Imagen Generada]({url_img})"
-                    else:
-                        st.warning(url_img)
-                        contenido_final += f"\n\n(Error: {url_img})"
-
-            db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", contenido_final)
+        # Llamada al Cerebro
+        stream = cerebro.chat_con_gemini(
+            mensaje_usuario=prompt,
+            mensaje_con_contexto=mensaje_con_contexto,
+            historial_previo=msgs, 
+            nombre_rol_actual=st.session_state.rol_actual, 
+            plan=st.session_state.get("plan_actual", "free"), 
+            token=st.session_state.user_token,
+            usar_img_toggle=usar_img
+        )
+        
+        try:
+            for chunk in stream:
+                # Al usar el nuevo cerebro.py, 'chunk' ya trae el texto acumulado
+                full_resp = chunk
+                
+                es_imagen = "![" in full_resp and "(" in full_resp
+                
+                if es_imagen:
+                    imagen_generada = True
+                    container.empty() 
+                    mostrar_mensaje(full_resp)
+                else:
+                    container.markdown(full_resp + "▌")
             
-            # Auto-Scroll
-            js_scroll = """
-            <script>
-                function scrollDown() {
-                    var chatElements = window.parent.document.querySelectorAll(".stChatMessage");
-                    if (chatElements.length > 0) {
-                        chatElements[chatElements.length - 1].scrollIntoView({behavior: "smooth", block: "end"});
-                    }
-                }
-                setTimeout(scrollDown, 500);
-            </script>
-            """
-            components.html(js_scroll, height=0)
+            # Limpieza final del cursor
+            if not imagen_generada and full_resp:
+                container.markdown(full_resp)
 
-    if nuevo_chat:
+        except Exception as e:
+            full_resp = f"Error: {e}"
+            container.error(full_resp)
+            # DIAGNÓSTICO TÉCNICO (Solo visible si hay error)
+            with st.expander("🛠️ Diagnóstico del Sistema"):
+                st.write(f"Detalle del error: {str(e)}")
+
+        # Guardar en DB solo si no es un error y no es una acción interna
+        if "ACTION_" not in full_resp and full_resp and "Error:" not in full_resp:
+            db.guardar_msg(st.session_state.usuario, st.session_state.chat_id, "assistant", full_resp)
+    
+    if first_msg:
+        time.sleep(0.5)
         st.rerun()

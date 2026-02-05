@@ -1,128 +1,142 @@
-import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
-import datetime
+import sqlite3
+import hashlib
 import uuid
-import os
+import datetime
 
-# --- 1. CONEXIÓN ROBUSTA A FIREBASE ---
-if not firebase_admin._apps:
+DB_NAME = "kortexa_db.sqlite"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Tabla Usuarios
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT,
+            plan TEXT DEFAULT 'free',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    # Tabla Chats
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            username TEXT,
+            titulo TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(username) REFERENCES usuarios(username)
+        )
+    ''')
+    # Tabla Mensajes
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS mensajes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id TEXT,
+            role TEXT,
+            content TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(chat_id) REFERENCES chats(id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# --- USUARIOS ---
+def crear_user(username, password):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     try:
-        if os.path.exists("firebase_key.json"):
-            cred = credentials.Certificate("firebase_key.json")
-            firebase_admin.initialize_app(cred)
-        else:
-            st.error("⚠️ Error Crítico: No se encuentra el archivo 'firebase_key.json'.")
-            st.stop()
-    except Exception as e:
-        st.error(f"⚠️ Error al conectar con Firebase: {e}")
-        st.stop()
-
-db = firestore.client()
-
-# --- 2. GESTIÓN DE USUARIOS ---
-def login(usuario, password):
-    try:
-        doc_ref = db.collection("usuarios").document(usuario)
-        doc = doc_ref.get()
-        if doc.exists:
-            datos = doc.to_dict()
-            if datos.get("password") == password:
-                return True
-        return False
-    except:
-        return False
-
-def crear_user(usuario, password):
-    try:
-        doc_ref = db.collection("usuarios").document(usuario)
-        if doc_ref.get().exists:
-            return False 
-        doc_ref.set({
-            "usuario": usuario,
-            "password": password,
-            "creado": datetime.datetime.now()
-        })
+        c.execute("INSERT INTO usuarios (username, password_hash, plan) VALUES (?, ?, 'free')", (username, pwd_hash))
+        conn.commit()
         return True
-    except:
+    except sqlite3.IntegrityError:
         return False
+    finally:
+        conn.close()
 
-# --- 3. GESTIÓN DE SESIONES (CHATS) ---
-def crear_sesion(usuario, rol, titulo):
-    try:
-        chat_id = str(uuid.uuid4())
-        db.collection("chats").document(chat_id).set({
-            "usuario": usuario,
-            "rol": rol,
-            "titulo": titulo,
-            "fecha": datetime.datetime.now(),
-            "mensajes": [] 
-        })
-        return chat_id
-    except:
-        return None
+def login(username, password):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    pwd_hash = hashlib.sha256(password.encode()).hexdigest()
+    c.execute("SELECT * FROM usuarios WHERE username=? AND password_hash=?", (username, pwd_hash))
+    user = c.fetchone()
+    conn.close()
+    return user is not None
 
-def obtener_sesiones(usuario):
-    try:
-        docs = db.collection("chats").where("usuario", "==", usuario).stream()
-        chats = [(doc.id, doc.to_dict()) for doc in docs]
-        chats.sort(key=lambda x: x[1].get("fecha", ""), reverse=True)
-        return chats
-    except:
-        return []
+def obtener_plan_usuario(username):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT plan FROM usuarios WHERE username=?", (username,))
+    res = c.fetchone()
+    conn.close()
+    if res: return res[0]
+    return "free"
 
-# --- NUEVAS FUNCIONES DE BORRADO ---
+def actualizar_plan_usuario(username, nuevo_plan):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("UPDATE usuarios SET plan=? WHERE username=?", (nuevo_plan, username))
+    conn.commit()
+    conn.close()
+
+# --- CHATS ---
+def crear_sesion(username, rol, primer_mensaje):
+    init_db()
+    chat_id = str(uuid.uuid4())
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    titulo = primer_mensaje[:30] + "..."
+    c.execute("INSERT INTO chats (id, username, titulo) VALUES (?, ?, ?)", (chat_id, username, titulo))
+    conn.commit()
+    conn.close()
+    return chat_id
+
+def obtener_sesiones(username):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT id, titulo, timestamp FROM chats WHERE username=? ORDER BY timestamp DESC", (username,))
+    data = c.fetchall()
+    conn.close()
+    return [(row[0], {'titulo': row[1], 'timestamp': row[2]}) for row in data]
+
+def cargar_msgs(username, chat_id):
+    if not chat_id: return []
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM mensajes WHERE chat_id=? ORDER BY id ASC", (chat_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{"role": r[0], "content": r[1]} for r in rows]
+
+def guardar_msg(username, chat_id, role, content):
+    if not chat_id: return
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("INSERT INTO mensajes (chat_id, role, content) VALUES (?, ?, ?)", (chat_id, role, content))
+    conn.commit()
+    conn.close()
+
+# --- FUNCIONES DE BORRADO (LAS QUE NECESITAS) ---
+
 def eliminar_chat(chat_id):
-    """Elimina un chat específico por ID."""
-    try:
-        db.collection("chats").document(chat_id).delete()
-        return True
-    except:
-        return False
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Primero mensajes, luego el chat (por integridad referencial)
+    c.execute("DELETE FROM mensajes WHERE chat_id=?", (chat_id,))
+    c.execute("DELETE FROM chats WHERE id=?", (chat_id,))
+    conn.commit()
+    conn.close()
 
-def eliminar_todo(usuario):
-    """Elimina TODOS los chats de un usuario."""
-    try:
-        docs = db.collection("chats").where("usuario", "==", usuario).stream()
-        batch = db.batch()
-        count = 0
-        for doc in docs:
-            batch.delete(doc.reference)
-            count += 1
-            if count >= 400: # Límite por batch
-                batch.commit()
-                batch = db.batch()
-                count = 0
-        if count > 0:
-            batch.commit()
-        return True
-    except:
-        return False
-
-# --- 4. GESTIÓN DE MENSAJES ---
-def guardar_msg(usuario, chat_id, rol, contenido):
-    try:
-        if not chat_id: return
-        nuevo_mensaje = {
-            "role": rol,
-            "content": contenido,
-            "timestamp": datetime.datetime.now()
-        }
-        db.collection("chats").document(chat_id).update({
-            "mensajes": firestore.ArrayUnion([nuevo_mensaje])
-        })
-    except:
-        pass
-
-def cargar_msgs(usuario, chat_id):
-    try:
-        if not chat_id: return []
-        doc = db.collection("chats").document(chat_id).get()
-        if doc.exists:
-            return doc.to_dict().get("mensajes", [])
-        return []
-    except:
-        return []
-    
-def login_google(email, nombre):
-    return True
+def eliminar_todo(username):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # Subquery para borrar mensajes de todos los chats de ese usuario
+    c.execute("DELETE FROM mensajes WHERE chat_id IN (SELECT id FROM chats WHERE username=?)", (username,))
+    c.execute("DELETE FROM chats WHERE username=?", (username,))
+    conn.commit()
+    conn.close()
