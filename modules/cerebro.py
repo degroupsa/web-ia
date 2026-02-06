@@ -2,28 +2,29 @@ import time
 import google.generativeai as genai
 from modules import tools
 import streamlit as st
-import os  # Necesario para leer variables de entorno en Render
+import os  # <--- IMPORTANTE: Necesario para leer la clave de Render
 
 # ==========================================
-# 🔑 CONFIGURACIÓN DE GEMINI (SEGURIDAD HÍBRIDA)
+# 🔑 CONFIGURACIÓN DE GEMINI (HYBRID AUTH)
 # ==========================================
 GEMINI_API_KEY = None
 
-# Intento 1: Secretos de Streamlit (Local / Streamlit Cloud)
+# 1. Intentamos leer de st.secrets (Para cuando lo usas en tu PC)
 try:
-    GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    if "GOOGLE_API_KEY" in st.secrets:
+        GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
     pass
 
-# Intento 2: Variables de Entorno (Render / Docker / VPS)
+# 2. Si falló lo anterior, leemos de las Variables de Entorno (Para Render)
 if not GEMINI_API_KEY:
     GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Validación Final
+# 3. Verificación final
 if not GEMINI_API_KEY:
-    print("⚠️ ERROR CRÍTICO: No se encontró la API KEY de Google.")
-    # Usamos una dummy para no romper la importación, pero fallará al llamar
-    GEMINI_API_KEY = "CLAVE_NO_ENCONTRADA" 
+    print("⚠️ ERROR CRÍTICO: No se encontró la API KEY (Ni en secrets ni en environment).")
+    # Ponemos algo para que no explote el import, aunque fallará al generar
+    GEMINI_API_KEY = "NO_KEY_FOUND"
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -46,22 +47,20 @@ safety_settings = [
 ]
 
 def obtener_modelo_exacto(plan):
-    # LISTA EXACTA BASADA EN TU CAPTURA DE PANTALLA (VERDE)
+    # TUS MODELOS CONFIRMADOS
     if plan in ["pro", "enterprise"]:
         return [
-            "gemini-3-pro-preview",    # Tu modelo más potente (detectado en lista)
-            "gemini-2.5-pro",          # Respaldo sólido (detectado en lista)
-            "nano-banana-pro-preview", # Tu versión visual (detectado en lista)
-            "gemini-2.0-flash-exp"     # Último recurso
+            "gemini-3-pro-preview",
+            "gemini-2.5-pro",
+            "nano-banana-pro-preview",
+            "gemini-2.0-flash-exp"
         ]
     else:
         return ["gemini-2.5-flash", "gemini-flash-latest"]
 
 def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nombre_rol_actual, plan="free", token=None, usar_img_toggle=False):
     
-    # ---------------------------------------------------------
-    # 1. MODO IMAGEN ACTIVADO
-    # ---------------------------------------------------------
+    # 1. IMAGENES
     tiene_permiso_img = plan in ["pro", "enterprise"]
 
     if usar_img_toggle and tiene_permiso_img:
@@ -77,9 +76,7 @@ def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nom
          yield "🔒 **Acceso Denegado:** Kortexa Art Studio requiere Plan PRO."
          return
 
-    # ---------------------------------------------------------
-    # 2. MODO TEXTO (Gemini 3.0 / 2.5)
-    # ---------------------------------------------------------
+    # 2. TEXTO
     modelos_candidatos = obtener_modelo_exacto(plan)
     
     chat_history = []
@@ -95,7 +92,6 @@ def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nom
             # LÓGICA DE ALERTA VISUAL
             instruccion_extra = ""
             if not usar_img_toggle:
-                # Si está apagado, le obligamos a mostrar una ALERTA VISIBLE
                 instruccion_extra = """
                 ATENCIÓN: El módulo de imágenes está APAGADO.
                 Si el usuario pide una imagen, responde EXACTAMENTE con este formato:
@@ -136,4 +132,4 @@ def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nom
         except Exception as e:
             continue 
 
-    yield f"⚠️ **Error de Sistema:** No se pudo conectar con los modelos 3.0 ni 2.5. Verifica tu API Key en la configuración del servidor."
+    yield f"⚠️ **Error de Sistema:** No se pudo conectar con los modelos. Verifica tu API Key."
