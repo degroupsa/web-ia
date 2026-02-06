@@ -2,18 +2,35 @@ import time
 import google.generativeai as genai
 from modules import tools
 import streamlit as st
+import os  # Necesario para leer variables de entorno en Render
 
 # ==========================================
-# 🔑 CONFIGURACIÓN DE GEMINI
+# 🔑 CONFIGURACIÓN DE GEMINI (SEGURIDAD HÍBRIDA)
 # ==========================================
-# En lugar de pegar el texto, leemos el secreto
-GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
+GEMINI_API_KEY = None
+
+# Intento 1: Secretos de Streamlit (Local / Streamlit Cloud)
+try:
+    GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    pass
+
+# Intento 2: Variables de Entorno (Render / Docker / VPS)
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# Validación Final
+if not GEMINI_API_KEY:
+    print("⚠️ ERROR CRÍTICO: No se encontró la API KEY de Google.")
+    # Usamos una dummy para no romper la importación, pero fallará al llamar
+    GEMINI_API_KEY = "CLAVE_NO_ENCONTRADA" 
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
-    print(f"Error configurando: {e}")
+    print(f"Error configurando Gemini: {e}")
 
+# Configuración del modelo
 generation_config = {
     "temperature": 0.85,
     "top_p": 0.95,
@@ -119,4 +136,4 @@ def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nom
         except Exception as e:
             continue 
 
-    yield f"⚠️ **Error de Sistema:** No se pudo conectar con los modelos 3.0 ni 2.5."
+    yield f"⚠️ **Error de Sistema:** No se pudo conectar con los modelos 3.0 ni 2.5. Verifica tu API Key en la configuración del servidor."
