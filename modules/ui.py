@@ -62,7 +62,7 @@ def cargar_estilos_extra():
                 color: #FF5F1F !important;
                 font-size: 14px !important; padding: 0px !important;
                 width: 32px !important; height: 32px !important;
-                min-height: 32px !important; /* Fix para evitar deformación */
+                min-height: 32px !important;
                 display: flex; align-items: center; justify-content: center;
                 transition: all 0.3s ease;
             }
@@ -108,22 +108,31 @@ def render_sidebar():
     styles.cargar_css()
     cargar_estilos_extra()
 
-    # Ajuste fino del padding del sidebar
     st.markdown("""<style>section[data-testid="stSidebar"] div.block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; } div[data-testid="stSidebarUserContent"] { padding-top: 0rem !important; }</style>""", unsafe_allow_html=True)
 
     # ------------------------------------------
     # ESCENARIO A: NO LOGUEADO (LANDING PAGE)
     # ------------------------------------------
     if not st.session_state.usuario:
-        # Usamos columnas [1, 2, 1] para centrar el contenido perfectamente en el medio
+        # Usamos columnas [1, 2, 1] para centrar el contenido perfectamente
         col_izq, col_centro, col_der = st.columns([1, 2, 1]) 
         
         with col_centro:
-            # 1. LOGO CENTRADO (Usamos flexbox container para asegurar centrado)
-            if os.path.exists("logo.png"): 
-                st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
-                st.image("logo.png", width=300)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # 1. LOGO CENTRADO (SOLUCIÓN DEFINITIVA)
+            # Usamos HTML directo para forzar el centro y evitar desplazamientos de st.image
+            if os.path.exists("logo.png"):
+                img_base64 = get_img_as_base64("logo.png")
+                if img_base64:
+                    st.markdown(
+                        f"""
+                        <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 15px;">
+                            <img src="data:image/png;base64,{img_base64}" style="max-width: 300px; width: 100%; object-fit: contain;">
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.image("logo.png", use_column_width=True)
             else: 
                 st.markdown('<div class="brand-title" style="text-align: center;">KORTEXA AI</div>', unsafe_allow_html=True)
             
@@ -186,7 +195,7 @@ def render_sidebar():
             
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # INFO PLAN
+            # PLANES
             label_plan = "🌱 FREE" if plan_real == "free" else ("💎 PRO" if plan_real == "pro" else "⭐ BIZ")
             st.markdown(f"<div class='plan-text'>Plan actual: <span class='plan-badge'>{label_plan}</span></div>", unsafe_allow_html=True)
             if plan_real != "enterprise":
@@ -194,7 +203,7 @@ def render_sidebar():
             
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # BOTÓN NUEVO CHAT
+            # NUEVO CHAT
             if st.button("➕ Nuevo Chat", type="secondary", use_container_width=True):
                 st.session_state.chat_id = None; st.rerun()
 
@@ -219,7 +228,7 @@ def render_sidebar():
 
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # HISTORIAL DE CHATS
+            # HISTORIAL
             c_hist_title, c_spacer, c_hist_del = st.columns([2, 1, 1])
             with c_hist_title: st.caption("TUS CHATS")
             with c_spacer: st.empty()
@@ -252,9 +261,6 @@ def render_sidebar():
 
         return rol, web, img, up, tareas
 
-# ==========================================
-# 🧩 FUNCIONES AUXILIARES
-# ==========================================
 def render_chat_msgs(msgs):
     if not msgs: return
     for m in msgs:
