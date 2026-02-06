@@ -6,7 +6,9 @@ import os
 import base64
 import time
 
-# --- UTILIDADES ---
+# ==========================================
+# 🛠️ UTILIDADES
+# ==========================================
 def get_img_as_base64(file_path):
     try:
         with open(file_path, "rb") as f:
@@ -26,18 +28,19 @@ def simular_pago(nuevo_plan):
         time.sleep(1)
         st.rerun()
 
-# --- COMPONENTE: DIVISOR DEGRADADO ---
+# ==========================================
+# 🎨 COMPONENTES VISUALES
+# ==========================================
 def divider_gradiente():
     st.markdown("""
         <hr style="height: 1px; border: none; margin: 0px 0; 
         background: linear-gradient(90deg, transparent, #FF5F1F, #FFAA00, transparent); opacity: 0.5;">
     """, unsafe_allow_html=True)
 
-# --- CSS PERSONALIZADO ---
 def cargar_estilos_extra():
     st.markdown("""
         <style>
-            /* Botones Primarios (Degradado Naranja) */
+            /* 1. Botones Primarios (Degradado Naranja Kortexa) */
             section[data-testid="stSidebar"] button[kind="primary"] {
                 background: linear-gradient(90deg, #FF5F1F 0%, #FFAA00 100%);
                 border: none; color: white; font-weight: 600;
@@ -46,14 +49,12 @@ def cargar_estilos_extra():
             section[data-testid="stSidebar"] button[kind="primary"]:hover {
                 transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255, 95, 31, 0.4);
             }
+
+            /* 2. Badges y Textos */
             .plan-text { font-size: 0.9rem; color: #DDD; margin-bottom: 5px; }
             .plan-badge { font-weight: bold; color: #FFF; margin-left: 5px; }
             
-            /* Ajuste logo landing */
-            .landing-logo-container { display: flex; justify-content: center; margin-bottom: 20px; }
-            .landing-logo img { max-width: 250px !important; }
-
-            /* Botón Popover (Papelera) */
+            /* 3. Botón Popover (Papelera con Borde Degradado) */
             section[data-testid="stSidebar"] div[data-testid="stPopover"] > button {
                 background: linear-gradient(#262730, #262730) padding-box, linear-gradient(90deg, #FF5F1F, #FFAA00) border-box;
                 border: 2px solid transparent !important;
@@ -61,7 +62,7 @@ def cargar_estilos_extra():
                 color: #FF5F1F !important;
                 font-size: 14px !important; padding: 0px !important;
                 width: 32px !important; height: 32px !important;
-                min-height: 0px !important;
+                min-height: 32px !important; /* Fix para evitar deformación */
                 display: flex; align-items: center; justify-content: center;
                 transition: all 0.3s ease;
             }
@@ -72,7 +73,9 @@ def cargar_estilos_extra():
         </style>
     """, unsafe_allow_html=True)
 
-# --- MODAL DE PRECIOS ---
+# ==========================================
+# 💰 MODAL DE PRECIOS
+# ==========================================
 @st.dialog("Elige tu nivel de Inteligencia", width="large")
 def mostrar_modal_precios():
     st.markdown("""
@@ -98,24 +101,26 @@ def mostrar_modal_precios():
         st.markdown("""<div class="price-card" style="border-color: #FFD700;"><div class="p-title" style="color:#FFD700">BUSINESS</div><div class="p-price" style="color:#FFD700">$49<small>/mo</small></div><ul class="p-feat"><li>Modelo Ultra</li><li>Dashboard</li><li>Soporte VIP</li></ul></div>""", unsafe_allow_html=True)
         if st.button("🏢 Activar BIZ", use_container_width=True, key="btn_biz"): simular_pago("enterprise")
 
-# --- BARRA LATERAL PRINCIPAL ---
+# ==========================================
+# 🖥️ RENDERIZADO PRINCIPAL (SIDEBAR / LOGIN)
+# ==========================================
 def render_sidebar():
     styles.cargar_css()
     cargar_estilos_extra()
 
+    # Ajuste fino del padding del sidebar
     st.markdown("""<style>section[data-testid="stSidebar"] div.block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; } div[data-testid="stSidebarUserContent"] { padding-top: 0rem !important; }</style>""", unsafe_allow_html=True)
 
-    # ==========================================
-    # CASO A: LANDING PAGE (NO LOGUEADO)
-    # ==========================================
+    # ------------------------------------------
+    # ESCENARIO A: NO LOGUEADO (LANDING PAGE)
+    # ------------------------------------------
     if not st.session_state.usuario:
-        # Usamos columnas [1, 2, 1] para centrar el contenido en el medio
+        # Usamos columnas [1, 2, 1] para centrar el contenido perfectamente en el medio
         col_izq, col_centro, col_der = st.columns([1, 2, 1]) 
         
         with col_centro:
-            # 1. LOGO CENTRADO
+            # 1. LOGO CENTRADO (Usamos flexbox container para asegurar centrado)
             if os.path.exists("logo.png"): 
-                # Usamos un div contenedor para asegurar el centrado
                 st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
                 st.image("logo.png", width=300)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -159,11 +164,12 @@ def render_sidebar():
                                 st.query_params["user_token"] = nu 
                                 st.rerun()
                             else: st.error("Este usuario ya existe.")
+                            
         return None, None, None, None, None
 
-    # ==========================================
-    # CASO B: APP LOGUEADO
-    # ==========================================
+    # ------------------------------------------
+    # ESCENARIO B: LOGUEADO (APP SIDEBAR)
+    # ------------------------------------------
     else:
         try: plan_real = db.obtener_plan_usuario(st.session_state.usuario)
         except: plan_real = "free"
@@ -180,7 +186,7 @@ def render_sidebar():
             
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # PLANES
+            # INFO PLAN
             label_plan = "🌱 FREE" if plan_real == "free" else ("💎 PRO" if plan_real == "pro" else "⭐ BIZ")
             st.markdown(f"<div class='plan-text'>Plan actual: <span class='plan-badge'>{label_plan}</span></div>", unsafe_allow_html=True)
             if plan_real != "enterprise":
@@ -188,7 +194,7 @@ def render_sidebar():
             
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # NUEVO CHAT
+            # BOTÓN NUEVO CHAT
             if st.button("➕ Nuevo Chat", type="secondary", use_container_width=True):
                 st.session_state.chat_id = None; st.rerun()
 
@@ -213,11 +219,12 @@ def render_sidebar():
 
             spacer("15px"); divider_gradiente(); spacer("15px")
 
-            # HISTORIAL
+            # HISTORIAL DE CHATS
             c_hist_title, c_spacer, c_hist_del = st.columns([2, 1, 1])
             with c_hist_title: st.caption("TUS CHATS")
             with c_spacer: st.empty()
             with c_hist_del:
+                # Papelera con Popover
                 with st.popover("🗑️", use_container_width=False, help="Gestionar historial"):
                     st.caption("Gestionar")
                     if st.button("Eliminar Chat Actual", type="primary", use_container_width=True):
@@ -245,6 +252,9 @@ def render_sidebar():
 
         return rol, web, img, up, tareas
 
+# ==========================================
+# 🧩 FUNCIONES AUXILIARES
+# ==========================================
 def render_chat_msgs(msgs):
     if not msgs: return
     for m in msgs:
