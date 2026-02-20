@@ -1,186 +1,310 @@
+import sys
 import os
-import requests
-import json
-import firebase_admin
-from firebase_admin import credentials, auth
-from fastapi import FastAPI, HTTPException, Header, Depends
+import re
+import time
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Body, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional, List
 
-# --- CONFIGURACIÓN ---
-# ⚠️ TU API KEY DE GOOGLE (IA)
-GOOGLE_API_KEY = "AIzaSyCi0nXWreFloqaqB_QSt3iQeVgDmHwofmM" 
+import stripe
+import mercadopago
 
-URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+# --- CONFIGURACIÓN DE RUTAS ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE_DIR)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# Modelos
-MOTOR_FREE = "gemini-2.5-flash"
-MOTOR_PRO = "gemini-2.5-pro"
-MOTOR_IMAGEN = "gemini-2.5-flash-image"
+# Importamos módulos propios
+from modules import cerebro, database as db
 
-# --- INICIALIZACIÓN DE FIREBASE (SEGURIDAD) ---
-# Esto permite al Backend verificar quién es el usuario
-if not firebase_admin._apps:
-    try:
-        # Buscamos la llave en la carpeta raíz (un nivel arriba de 'backend/')
-        ruta_key = os.path.join(os.path.dirname(os.path.dirname(__file__)), "firebase_key.json")
-        
-        if os.path.exists(ruta_key):
-            cred = credentials.Certificate(ruta_key)
-            firebase_admin.initialize_app(cred)
-            print("🔐 Firebase Admin conectado exitosamente.")
-        else:
-            print(f"⚠️ ADVERTENCIA: No se encontró firebase_key.json en {ruta_key}")
-    except Exception as e:
-        print(f"Error iniciando Firebase: {e}")
+# --- INICIALIZACIÓN PASARELAS PAGO ---
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+mp_access_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN")
+mp_sdk = mercadopago.SDK(mp_access_token) if mp_access_token else None
 
-# --- ESTRUCTURAS DE DATOS ---
-class Mensaje(BaseModel):
-    role: str
-    content: str
+# --- INICIALIZACIÓN DE LA APP ---
+app = FastAPI(title="Kortexa Enterprise API v5.0")
 
-class PeticionChat(BaseModel):
-    mensaje_usuario: str
-    historial: List[Mensaje] = []
-    plan: str = "free"
-    rol_actual: str = "Asistente General"
-    # Nuevo: Token de usuario (opcional por ahora para no romper tu frontend actual)
-    token_usuario: Optional[str] = None 
-
-# --- INICIALIZAR APP ---
-app = FastAPI(
-    title="Kortexa API (Segura)",
-    version="3.0",
-    description="Backend con Capa de Seguridad Firebase"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- FUNCIÓN DE SEGURIDAD (EL PORTERO) ---
-async def verificar_usuario(authorization: str = Header(None)):
-    """
-    Este es el 'Portero' de la discoteca.
-    Verifica que el usuario traiga un Token válido de Firebase.
-    """
-    # MODO PERMISIVO (TEMPORAL): Si no hay token, dejamos pasar como "invitado"
-    # Esto es para que tu Streamlit actual no deje de funcionar hoy.
-    if not authorization:
-        return {"uid": "invitado", "email": "anonimo"}
+# --- MODELOS DE DATOS ---
+class AuthRequest(BaseModel):
+    email: str
+    password: str
 
+class GoogleAuthRequest(BaseModel):
+    email: str
+
+class RecoveryRequest(BaseModel):
+    email: str
+
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+    role: str = "Asistente General (Multimodal)"
+    image_mode: bool = False
+    internet_mode: bool = True
+    chat_id: Optional[str] = None
+    file_data: Optional[str] = None 
+    file_mime: Optional[str] = None
+
+class CheckoutRequest(BaseModel):
+    email: str
+    plan: str
+    provider: str
+
+# --- EVENTO DE INICIO ---
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 [SISTEMA] Iniciando Servidor Kortexa v5.0...")
+    if db.init_db():
+        if not db.existe_usuario("admin@kortexa.com.ar"):
+            db.crear_user("admin@kortexa.com.ar", "admin123")
+            db.actualizar_plan_usuario("admin@kortexa.com.ar", "pro")
+        print("✅ [SISTEMA] Base de datos conectada.")
+    else:
+        print("❌ [CRÍTICO] No se pudo conectar a Firebase.")
+
+# --- ENDPOINTS DE AUTENTICACIÓN ---
+@app.post("/api/register")
+async def register_user(req: AuthRequest):
     try:
-        token = authorization.replace("Bearer ", "")
-        decoded_token = auth.verify_id_token(token)
-        return decoded_token # Devuelve los datos del usuario (uid, email)
-    except Exception as e:
-        # Si el token es falso o expiró, denegamos acceso
-        print(f"Intento de acceso inválido: {e}")
-        # En el futuro, aquí lanzaremos HTTPException(401)
-        return {"uid": "invitado", "email": "error_token"}
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", req.email): raise HTTPException(status_code=400, detail="Formato inválido.")
+        if db.existe_usuario(req.email): raise HTTPException(status_code=400, detail="El usuario ya existe.")
+        if db.crear_user(req.email, req.password): return {"status": "ok", "message": "Usuario registrado exitosamente."}
+        else: raise HTTPException(status_code=500, detail="Error DB.")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-# --- LÓGICA DE NEGOCIO (IGUAL QUE ANTES) ---
-
-def api_gemini_texto(historial_formateado, modelo):
-    url = f"{URL_BASE}/{modelo}:generateContent?key={GOOGLE_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    
-    tools_payload = {
-        "function_declarations": [
-            {
-                "name": "herramienta_generar_imagen",
-                "description": "Genera una imagen visual.",
-                "parameters": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "descripcion_detallada": {"type": "STRING"},
-                    },
-                    "required": ["descripcion_detallada"]
-                }
-            }
-        ]
-    }
-
-    data = {
-        "contents": historial_formateado,
-        "tools": [tools_payload]
-    }
-    
+@app.post("/api/login")
+async def login_user(req: AuthRequest):
     try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code != 200: return None, f"Error Google Texto: {response.text}"
-        return response.json(), None
-    except Exception as e: return None, str(e)
+        if not db.existe_usuario(req.email): raise HTTPException(status_code=404, detail="El usuario no existe.")
+        res = db.verificar_credenciales(req.email, req.password)
+        if res: return {"status": "ok", "email": res["username"], "plan": res["plan"]}
+        else:
+            time.sleep(0.5)
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-def api_gemini_imagen(prompt):
-    url = f"{URL_BASE}/{MOTOR_IMAGEN}:generateContent?key={GOOGLE_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
+@app.post("/api/auth/google")
+async def auth_google(req: GoogleAuthRequest):
     try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code != 200: return None, f"Error HTTP Google: {response.text}"
-        try:
-            datos = response.json()
-            partes = datos["candidates"][0]["content"]["parts"]
-            for parte in partes:
-                if "inlineData" in parte:
-                    b64 = parte["inlineData"]["data"]
-                    mime = parte["inlineData"]["mimeType"]
-                    return f"data:{mime};base64,{b64}", None
-            return None, f"⚠️ Google respondió solo texto: {json.dumps(datos)}"
-        except Exception as e: return None, f"Error leyendo JSON: {str(e)}"
-    except Exception as e: return None, str(e)
+        resultado = db.login_con_google(req.email)
+        if resultado: return {"status": "ok", "email": req.email, "plan": resultado['plan']}
+        else: raise HTTPException(status_code=500, detail="Error sync Google.")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
-# --- ENDPOINTS ---
+@app.post("/api/auth/recover")
+async def recover_password(req: RecoveryRequest):
+    if not db.existe_usuario(req.email): raise HTTPException(status_code=404, detail="Correo no registrado.")
+    return {"status": "ok"}
 
-@app.get("/")
-def home():
-    return {"status": "Kortexa Brain Secure 🔒"}
-
-@app.post("/v1/chat")
-async def chatear(peticion: PeticionChat, authorization: Optional[str] = Header(None)):
-    
-    # 1. VERIFICACIÓN DE SEGURIDAD 👮‍♂️
-    usuario = await verificar_usuario(authorization)
-    print(f"👤 Solicitud de: {usuario.get('email', 'Anónimo')} (UID: {usuario.get('uid')})")
-    
-    # Aquí podríamos bloquear si el usuario no pagó, etc.
-    
-    # --- RESTO DEL CÓDIGO (Igual que antes) ---
-    if "TU_API_KEY" in GOOGLE_API_KEY:
-        raise HTTPException(status_code=500, detail="Falta API KEY")
-
-    modelo = MOTOR_PRO if peticion.plan == "pro" else MOTOR_FREE
-    
-    contents = []
-    sys_msg = f"SYSTEM: Eres Kortexa (Plan {peticion.plan}). Rol: {peticion.rol_actual}."
-    contents.append({"role": "user", "parts": [{"text": sys_msg}]})
-    contents.append({"role": "model", "parts": [{"text": "OK"}]})
-    
-    for m in peticion.historial:
-        role = "user" if m.role == "user" else "model"
-        if "data:image" not in m.content:
-            contents.append({"role": role, "parts": [{"text": m.content}]})
-
-    contents.append({"role": "user", "parts": [{"text": peticion.mensaje_usuario}]})
-
-    resp_json, error = api_gemini_texto(contents, modelo)
-    
-    if error: raise HTTPException(status_code=502, detail=f"Error Motor IA: {error}")
-
+# ==========================================
+# 🔥 ENDPOINT DEL CHAT CON LIMITES ACTIVOS 🔥
+# ==========================================
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
     try:
-        candidato = resp_json["candidates"][0]["content"]["parts"][0]
+        if not db.existe_usuario(req.user_id): 
+            return {"response": "🚫 Acceso Denegado.", "chat_id": None}
+
+        plan_actual = db.obtener_plan_usuario(req.user_id)
         
-        if "functionCall" in candidato:
-            fn = candidato["functionCall"]
-            if fn["name"] == "herramienta_generar_imagen":
-                if peticion.plan == "free":
-                    return {"respuesta": "🔒 Función Premium: Actualiza a PRO."}
-                
-                prompt_img = fn["args"].get("descripcion_detallada")
-                url_img, err_img = api_gemini_imagen(prompt_img)
-                if err_img: return {"respuesta": f"❌ ERROR: {err_img}"}
-                return {"respuesta": f"![Imagen Generada]({url_img})"}
+        # 1. VERIFICAMOS SI TIENE CUOTA DISPONIBLE ANTES DE LLAMAR A LA IA
+        puede_usar, mensaje_limite = db.verificar_y_consumir_cuota(req.user_id, plan_actual, req.image_mode)
+        
+        # Aseguramos un chat_id para poder mostrar el mensaje de límite en pantalla
+        chat_id = req.chat_id
+        if not chat_id: chat_id = db.crear_sesion(req.user_id, req.role, req.message)
 
-        if "text" in candidato: return {"respuesta": candidato["text"]}
-            
+        # Si llegó al límite, bloqueamos la petición y le decimos que mejore su plan
+        if not puede_usar:
+            db.guardar_msg(req.user_id, chat_id, "user", req.message)
+            db.guardar_msg(req.user_id, chat_id, "assistant", mensaje_limite)
+            return {"response": mensaje_limite, "chat_id": chat_id, "plan": plan_actual}
+
+        # 2. SI TIENE CUOTA, PROCEDEMOS NORMALMENTE
+        db.guardar_msg(req.user_id, chat_id, "user", req.message)
+        historial = db.cargar_msgs(req.user_id, chat_id)
+
+        respuesta_completa = ""
+        generador = cerebro.chat_con_gemini(
+            mensaje_usuario=req.message, 
+            mensaje_con_contexto=req.message, 
+            historial_previo=historial, 
+            nombre_rol_actual=req.role, 
+            plan=plan_actual, 
+            token=None, 
+            usar_img_toggle=req.image_mode,
+            usar_internet_toggle=req.internet_mode,
+            archivo_base64=req.file_data,
+            mime_type=req.file_mime
+        )
+        
+        for chunk in generador: respuesta_completa += chunk
+
+        if "⚠️" not in respuesta_completa:
+            db.guardar_msg(req.user_id, chat_id, "assistant", respuesta_completa)
+
+        return {"response": respuesta_completa, "chat_id": chat_id, "plan": plan_actual}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Excepción: {str(e)}")
+        print(f"❌ Error en chat: {e}")
+        return {"response": "⚠️ Error del Sistema Neuronal.", "chat_id": req.chat_id}
 
-    return {"respuesta": "Sin contenido."}
+# --- ENDPOINTS DE HISTORIAL ---
+@app.get("/api/history")
+def get_history(user_id: str):
+    try: return [{"id": s[0], "title": s[1]['titulo'], "date": str(s[1]['timestamp'])[:10]} for s in db.obtener_sesiones(user_id)]
+    except: return []
+
+@app.get("/api/history/{chat_id}")
+def get_chat_details(chat_id: str, user_id: str):
+    try: return db.cargar_msgs(user_id, chat_id)
+    except: return []
+
+@app.delete("/api/history/clear")
+async def clear_all_history(user_id: str):
+    try:
+        if db.eliminar_todos_chats(user_id): return {"status": "ok", "message": "Historial purgado."}
+        raise HTTPException(status_code=500, detail="Error BD.")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/history/{chat_id}")
+def delete_chat(chat_id: str):
+    try:
+        if db.eliminar_chat(chat_id): return {"status": "ok"}
+        raise HTTPException(status_code=500, detail="Fallo borrado.")
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# 🔥 ENDPOINT DE PAGOS (CHECKOUT) 🔥
+# ==========================================
+@app.post("/api/checkout")
+async def create_checkout(request: CheckoutRequest):
+    email = request.email
+    plan = request.plan
+    provider = request.provider
+
+    domain_url = os.environ.get("DOMINIO_FRONTEND", "http://localhost:3010")
+
+    precios_usd = {"pro": 1500, "business": 4900} # 🔥 PRO ACTUALIZADO A $15
+    precios_ars = {"pro": 18000, "business": 58000} # Ajusta en ARS según cotización
+
+    # --- LÓGICA STRIPE ---
+    if provider == "stripe":
+        if not stripe.api_key:
+            raise HTTPException(status_code=500, detail="Falta configurar la Key de Stripe")
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                customer_email=email,
+                payment_method_types=['card'],
+                line_items=[{
+                    'price_data': {
+                        'currency': 'usd',
+                        'product_data': {'name': f'Kortexa AI - Plan {plan.capitalize()}'},
+                        'unit_amount': precios_usd.get(plan, 1500),
+                    },
+                    'quantity': 1,
+                }],
+                mode='payment',
+                success_url=f"{domain_url}/?success=true",
+                cancel_url=f"{domain_url}/?canceled=true",
+                metadata={"email": email, "plan": plan}
+            )
+            return {"url": checkout_session.url}
+        except Exception as e:
+            print(f"❌ ERROR EXACTO DE STRIPE: {e}") 
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # --- LÓGICA MERCADO PAGO ---
+    elif provider == "mercadopago":
+        if not mp_sdk:
+            raise HTTPException(status_code=500, detail="Falta configurar la Key de Mercado Pago")
+        try:
+            preference_data = {
+                "items": [{
+                    "title": f"Kortexa AI - Plan {plan.capitalize()}",
+                    "quantity": 1,
+                    "unit_price": float(precios_ars.get(plan, 18000)),
+                    "currency_id": "ARS"
+                }],
+                "payer": {"email": email},
+                "metadata": {"email": email, "plan": plan}
+            }
+            
+            preference_response = mp_sdk.preference().create(preference_data)
+            
+            if "response" in preference_response and "init_point" in preference_response["response"]:
+                return {"url": preference_response["response"]["init_point"]}
+            else:
+                print(f"❌ ERROR RESPUESTA MERCADO PAGO: {preference_response}")
+                raise HTTPException(status_code=400, detail=str(preference_response))
+                
+        except Exception as e:
+            print(f"❌ ERROR EXACTO DE MERCADO PAGO: {e}") 
+            raise HTTPException(status_code=400, detail=str(e))
+
+    raise HTTPException(status_code=400, detail="Proveedor de pago no válido")
+
+# ==========================================
+# 🔥 WEBHOOKS: ACTUALIZACIÓN AUTOMÁTICA DE PLANES 🔥
+# ==========================================
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    endpoint_secret = os.environ.get("STRIPE_WEBHOOK_SECRET") 
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+    except ValueError as e: return HTTPException(status_code=400, detail="Payload inválido")
+    except stripe.error.SignatureVerificationError as e: return HTTPException(status_code=400, detail="Firma inválida")
+
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        email = session.get('metadata', {}).get('email')
+        plan = session.get('metadata', {}).get('plan')
+        
+        if email and plan:
+            print(f"💰 [STRIPE] ¡Pago recibido! Actualizando a {email} al plan {plan.upper()}")
+            db.actualizar_plan_usuario(email, plan)
+
+    return {"status": "success"}
+
+@app.post("/api/webhook/mercadopago")
+async def mercadopago_webhook(request: Request):
+    body = await request.json()
+    
+    if body.get("type") == "payment" or body.get("topic") == "payment":
+        payment_id = body.get("data", {}).get("id") or request.query_params.get("id")
+        
+        if payment_id and mp_sdk:
+            try:
+                payment_info = mp_sdk.payment().get(payment_id)
+                payment = payment_info.get("response", {})
+                
+                if payment.get("status") == "approved":
+                    metadata = payment.get("metadata", {})
+                    email = metadata.get("email")
+                    plan = metadata.get("plan")
+                    
+                    if email and plan:
+                        print(f"💰 [MERCADO PAGO] ¡Pago recibido! Actualizando a {email} al plan {plan.upper()}")
+                        db.actualizar_plan_usuario(email, plan)
+            except Exception as e:
+                print(f"❌ Error verificando pago en MP: {e}")
+                
+    return {"status": "success"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

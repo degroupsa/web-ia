@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #0E1117;     /* Streamlit Main Background */
+  --bg-sidebar: #262730;  /* Streamlit Sidebar Background */
+  --kortexa-gradient: linear-gradient(90deg, #FF5F1F 0%, #FFAA00 100%);
+}
+
+body {
+  background-color: var(--bg-main);
+  color: #FAFAFA;
+  font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden; 
+}
+
+/* --- SCROLLBAR ESTILO STREAMLIT --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #41444C;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555861;
+}
+
+/* Utilidad para el gradiente de texto */
+.text-kortexa-gradient {
+  background: linear-gradient(90deg, #FF5F1F 0%, #FFAA00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+/* Estilos para ReactMarkdown */
+.markdown-body p { margin-bottom: 0.8em; line-height: 1.6; }
+.markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.8em; }
+.markdown-body pre {
+  background-color: #1C1E24;
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  border: 1px solid #41444C;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.markdown-body code {
+  font-family: monospace;
+  background-color: rgba(255,255,255,0.1);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* --- NUEVOS ESTILOS KORTEXA UI --- */
+
+/* Animación Spinner de Carga */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.kortexa-loader {
+  border: 3px solid rgba(255, 95, 31, 0.2);
+  border-top: 3px solid #FF5F1F; /* Naranja Kortexa */
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+/* Efecto Vidrio para Modal */
+.glass-modal {
+  background: rgba(14, 17, 23, 0.85);
+  backdrop-filter: blur(12px);
+}
