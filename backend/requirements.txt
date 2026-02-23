@@ -1,13 +1,14 @@
-streamlit
+fastapi
+uvicorn
+python-dotenv
+pydantic
+stripe
+mercadopago
+firebase-admin>=6.5.0
 google-generativeai>=0.8.6
 google-api-core>=2.17.1
 google-auth>=2.27.0
-firebase-admin>=6.5.0
 requests
 pandas
 openpyxl
 PyPDF2
-watchdog
-fastapi
-uvicorn
-# tavily-python  <-- Descomentar solo si vas a configurar la API de Tavily para búsquedas
