@@ -8,4 +8,6 @@ pandas
 openpyxl
 PyPDF2
 watchdog
+fastapi
+uvicorn
 # tavily-python  <-- Descomentar solo si vas a configurar la API de Tavily para búsquedas
