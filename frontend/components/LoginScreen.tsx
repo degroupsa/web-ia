@@ -30,7 +30,7 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: (email
     if (!auth) { setError("Error Config Firebase"); return; }
     try {
         const result = await signInWithPopup(auth, googleProvider);
-        const res = await fetch("http://localhost:8000/api/auth/google", {
+        const res = await fetch("https://kortexa-backend.onrender.com/api/auth/google", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: result.user.email }),
         });
@@ -61,7 +61,7 @@ export default function LoginScreen({ onLoginSuccess }: { onLoginSuccess: (email
     e.preventDefault(); setLoading(true); setError("");
     const ep = isRegistering ? "/api/register" : "/api/login";
     try {
-        const res = await fetch(`http://localhost:8000${ep}`, {
+        const res = await fetch(`https://kortexa-backend.onrender.com${ep}`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
         });

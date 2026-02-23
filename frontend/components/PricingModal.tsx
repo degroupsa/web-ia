@@ -28,7 +28,7 @@ export default function PricingModal({
     setIsProcessing(`${plan}-${proveedor}`);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/checkout`, {
+      const res = await fetch(`https://kortexa-backend.onrender.com/api/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: userEmail, plan: plan, provider: proveedor })

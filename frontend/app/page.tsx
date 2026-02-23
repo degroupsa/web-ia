@@ -195,7 +195,7 @@ export default function KortexaPage() {
 
   const fetchHistory = async (email: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/history?user_id=${email}`);
+      const res = await fetch(`https://kortexa-backend.onrender.com/api/history?user_id=${email}`);
       if (res.ok) setChatHistory(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -225,7 +225,7 @@ export default function KortexaPage() {
             setConfirmModal(prev => ({...prev, isOpen: false})); 
             setDeletingChatId(chatId); 
             try {
-                await fetch(`http://localhost:8000/api/history/${chatId}`, { method: "DELETE" });
+                await fetch(`https://kortexa-backend.onrender.com/api/history/${chatId}`, { method: "DELETE" });
                 setChatHistory(prev => prev.filter(c => c.id !== chatId));
                 if (activeChatId === chatId) { setMessages([]); setActiveChatId(null); }
             } catch (e) { alert("Error al eliminar"); }
@@ -242,7 +242,7 @@ export default function KortexaPage() {
             setConfirmModal(prev => ({...prev, isOpen: false}));
             setIsDeletingChats(true);
             try {
-                const res = await fetch(`http://localhost:8000/api/history/clear?user_id=${authData?.email}`, { method: "DELETE" });
+                const res = await fetch(`https://kortexa-backend.onrender.com/api/history/clear?user_id=${authData?.email}`, { method: "DELETE" });
                 if (res.ok) { 
                     setChatHistory([]); 
                     setMessages([]); 
@@ -261,7 +261,7 @@ export default function KortexaPage() {
   const handleSelectChat = async (id: string) => {
     setActiveChatId(id); setIsLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/history/${id}?user_id=${authData?.email}`);
+      const res = await fetch(`https://kortexa-backend.onrender.com/api/history/${id}?user_id=${authData?.email}`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data.map((m: any) => ({ role: m.role === "model" ? "assistant" : m.role, content: m.content })));
@@ -389,7 +389,7 @@ export default function KortexaPage() {
     try {
       setAttachedFile(null); 
 
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch("https://kortexa-backend.onrender.com/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
             user_id: authData?.email, 
