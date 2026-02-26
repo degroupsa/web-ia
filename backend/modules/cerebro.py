@@ -53,16 +53,49 @@ def chat_con_gemini(mensaje_usuario, mensaje_con_contexto, historial_previo, nom
     except Exception as e: 
         yield f"⚠️ Error Configuración: {e}"; return
 
-    # --- MÓDULO DE IMÁGENES (KORTEXA STUDIO) ---
+    # --- MÓDULO DE IMÁGENES (KORTEXA STUDIO CON CLASIFICADOR) ---
     if usar_img_toggle:
+        print("🎨 MODO STUDIO DETECTADO. Consultando al portero inteligente...")
+        try:
+            # 1. El Portero analiza la intención del usuario
+            prompt_clasificador = f"""
+            Eres un clasificador de intenciones.
+            Mensaje del usuario: "{mensaje_usuario}"
+            Reglas:
+            - Si el mensaje describe algo visual, pide crear, dibujar, o generar una imagen (ej: "un perro rojo", "dibuja una casa", "genera un logo"), responde ÚNICAMENTE: IMAGEN
+            - Si el mensaje es un saludo, una pregunta general, o charla conversacional (ej: "hola", "¿cómo estás?", "¿qué hora es?"), responde ÚNICAMENTE: TEXTO
+            """
+            
+            respuesta_portero = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt_clasificador
+            )
+            intencion = respuesta_portero.text.strip().upper()
+            print(f"🧠 El portero decidió que el mensaje es: {intencion}")
+            
+            # 2. Reaccionamos según la decisión
+            if "TEXTO" in intencion:
+                yield "🎨 **¡Hola! Kortexa Studio está activo.**\n\nActualmente estoy en mi modo artista, enfocado en generar imágenes para vos. Si querés charlar o hacerme preguntas, por favor pasame al modo Chat normal.\n\n*Si querés ver mi magia, ¡pedime que dibuje algo!*"
+                return
+                
+        except Exception as e:
+            print(f"⚠️ Error en el portero: {e}")
+            pass # Si falla, sigue de largo y asume que quiere una imagen para no trabar la app
+
+        # 3. Si el portero dijo IMAGEN (o falló), procedemos a dibujar
         if plan in ["pro", "enterprise"]:
             try:
                 url = tools.generar_imagen(mensaje_usuario)
                 yield f"![Imagen generada]({url})\n> *{mensaje_usuario}*"
                 return
-            except: yield "⚠️ Error generando imagen. Intenta con otro prompt."; return
-        else: yield "🔒 Esta función requiere Kortexa PRO."; return
+            except: 
+                yield "⚠️ Error generando imagen. Intenta con otro prompt."
+                return
+        else: 
+            yield "🔒 Esta función requiere Kortexa PRO."
+            return
 
+    # --- MÓDULO DE CHAT NORMAL ---
     modelos_candidatos = obtener_modelo_exacto(plan)
     
     # Obtenemos las tareas y la lista exacta de nombres para sugerencias

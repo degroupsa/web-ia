@@ -9,8 +9,10 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-// 🔥 LIBRERÍA DE DISEÑO DE CÓDIGO 🔥
+// 🔥 LIBRERÍA DE DISEÑO DE CÓDIGO (Ignoramos los warnings de TypeScript) 🔥
+// @ts-ignore
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+// @ts-ignore
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Importamos componentes
@@ -22,7 +24,7 @@ interface Message { role: "user" | "assistant"; content: string; }
 interface ChatSession { id: string; title: string; date: string; }
 
 // ==========================================
-// 🔥 NUEVO: RENDERIZADOR AVANZADO CON VISTA PREVIA WEB 🔥
+// 🔥 RENDERIZADOR AVANZADO CON VISTA PREVIA WEB 🔥
 // ==========================================
 const CodeBlockRenderer = ({ inline, className, children, onCopy, ...props }: any) => {
   const match = /language-(\w+)/.exec(className || "");
@@ -102,6 +104,39 @@ const CodeBlockRenderer = ({ inline, className, children, onCopy, ...props }: an
   );
 };
 
+// ==========================================
+// 🔥 OPTIMIZACIÓN DE RENDIMIENTO: MEMOIZACIÓN DEL MENSAJE 🔥
+// ==========================================
+const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: string) => void }) => {
+  let displayContent = msg.content;
+  if (msg.role === 'assistant') {
+     displayContent = displayContent.replace(/💡\s*\**Sugerencia Kortexa:?\**\s*Para obtener un resultado de nivel experto en este tema, te recomiendo cambiar al modo\s*\**(.*?)\**\s*en el panel lateral\.?/gi, "").trim();
+  }
+
+  return (
+    <div className={`flex gap-5 ${msg.role === "user" ? "justify-end" : "justify-start"} group animate-in fade-in duration-300`}>
+       {msg.role === "assistant" && <div className="w-9 h-9 rounded-lg bg-[#1C1E24] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm overflow-hidden"><img src="/icon.png" className="w-6 h-6 object-contain" onError={(e) => e.currentTarget.style.display='none'} /></div>}
+       <div className={`max-w-[85%] px-6 py-4 rounded-2xl shadow-md ${msg.role === "user" ? "bg-[#262730] border border-[#41444C] text-[#FAFAFA] rounded-tr-sm" : "bg-transparent text-[#FAFAFA] w-full"}`}>
+         {msg.role === "assistant" ? (
+           <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+             <ReactMarkdown
+               components={{
+                 code(props: any) {
+                   return <CodeBlockRenderer {...props} onCopy={onCopy} />;
+                 }
+               }}
+             >
+               {displayContent}
+             </ReactMarkdown>
+           </div>
+         ) : (
+           <p className="text-sm">{displayContent}</p>
+         )}
+       </div>
+       {msg.role === "user" && <div className="w-9 h-9 rounded-lg bg-[#262730] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm"><User size={18} className="text-[#9799A5]" /></div>}
+    </div>
+  );
+});
 
 // ==========================================
 // APP PRINCIPAL
@@ -668,39 +703,11 @@ export default function KortexaPage() {
              </div>
            ) : (
              <div className="max-w-3xl mx-auto space-y-8 pt-4">
-               {messages.map((msg, i) => {
-                 let displayContent = msg.content;
-                 if (msg.role === 'assistant') {
-                    displayContent = displayContent.replace(/💡\s*\**Sugerencia Kortexa:?\**\s*Para obtener un resultado de nivel experto en este tema, te recomiendo cambiar al modo\s*\**(.*?)\**\s*en el panel lateral\.?/gi, "").trim();
-                 }
-
-                 return (
-                 <div key={i} className={`flex gap-5 ${msg.role === "user" ? "justify-end" : "justify-start"} group animate-in fade-in duration-300`}>
-                    {msg.role === "assistant" && <div className="w-9 h-9 rounded-lg bg-[#1C1E24] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm overflow-hidden"><img src="/icon.png" className="w-6 h-6 object-contain" onError={(e) => e.currentTarget.style.display='none'} /></div>}
-                    <div className={`max-w-[85%] px-6 py-4 rounded-2xl shadow-md ${msg.role === "user" ? "bg-[#262730] border border-[#41444C] text-[#FAFAFA] rounded-tr-sm" : "bg-transparent text-[#FAFAFA] w-full"}`}>
-                      {msg.role === "assistant" ? (
-                        
-                        // 🔥 AQUI LLAMAMOS AL NUEVO RENDERIZADOR COMPLETO 🔥
-                        <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
-                          <ReactMarkdown
-                            components={{
-                              code(props: any) {
-                                return <CodeBlockRenderer {...props} onCopy={(m: string) => setToastMessage(m)} />;
-                              }
-                            }}
-                          >
-                            {displayContent}
-                          </ReactMarkdown>
-                        </div>
-
-                      ) : (
-                        <p className="text-sm">{displayContent}</p>
-                      )}
-                    </div>
-                    {msg.role === "user" && <div className="w-9 h-9 rounded-lg bg-[#262730] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm"><User size={18} className="text-[#9799A5]" /></div>}
-                 </div>
-                 )
-               })}
+               
+               {/* 🔥 MAPEO OPTIMIZADO: Usamos la cápsula MemoizedMessage 🔥 */}
+               {messages.map((msg, i) => (
+                 <MessageBubble key={i} msg={msg} onCopy={(m: string) => setToastMessage(m)} />
+               ))}
                
                {isLoading && (
                  <div className="flex items-center gap-3 ml-14 mt-4 animate-in fade-in duration-300">
@@ -751,18 +758,38 @@ export default function KortexaPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="relative flex items-center bg-[#262730] border border-[#41444C] rounded-2xl shadow-2xl focus-within:border-[#FF5F1F] transition-all">
-                 <button ref={toggleMenuRef} onClick={() => setShowInputMenu(!showInputMenu)} type="button" className="pl-4 pr-1 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer">
+              {/* 🔥 FORMULARIO MEJORADO (Textarea inteligente) 🔥 */}
+              <form onSubmit={handleSendMessage} className="relative flex items-end bg-[#262730] border border-[#41444C] rounded-2xl shadow-2xl focus-within:border-[#FF5F1F] transition-all pb-1 pt-1">
+                 <button ref={toggleMenuRef} onClick={() => setShowInputMenu(!showInputMenu)} type="button" className="pl-4 pr-1 mb-2.5 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer">
                    <MoreVertical size={20} />
                  </button>
                  <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => e.target.files && setAttachedFile(e.target.files[0])} />
-                 <button onClick={() => fileInputRef.current?.click()} type="button" className="px-2 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer" title="Adjuntar documento o imagen">
+                 <button onClick={() => fileInputRef.current?.click()} type="button" className="px-2 mb-2.5 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer" title="Adjuntar documento o imagen">
                    <Paperclip size={18} />
                  </button>
                  
-                 <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Escribe tu mensaje a Kortexa..." className="w-full bg-transparent border-none text-white px-2 py-4 focus:ring-0 placeholder-[#9799A5] outline-none" />
+                 <textarea 
+                   value={inputValue} 
+                   onChange={(e) => setInputValue(e.target.value)} 
+                   placeholder="Escribe tu mensaje a Kortexa..." 
+                   className="w-full bg-transparent border-none text-white px-2 py-3 focus:ring-0 placeholder-[#9799A5] outline-none resize-none min-h-[44px] max-h-32 scrollbar-thin pr-14" 
+                   rows={1}
+                   onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = `${target.scrollHeight}px`;
+                   }}
+                   onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                   }}
+                 />
                  
-                 <button type="submit" disabled={(!inputValue.trim() && !attachedFile) || isLoading} className={`absolute right-2 p-2.5 rounded-xl transition-all border-none cursor-pointer flex items-center justify-center ${(!inputValue.trim() && !attachedFile) || isLoading ? "bg-[#262730] text-[#41444C]" : "bg-[#FF5F1F] text-white shadow-lg hover:scale-105"}`}><Send size={18} /></button>
+                 <button type="submit" disabled={(!inputValue.trim() && !attachedFile) || isLoading} className={`absolute right-2 bottom-2 p-2.5 rounded-xl transition-all border-none cursor-pointer flex items-center justify-center ${(!inputValue.trim() && !attachedFile) || isLoading ? "bg-[#262730] text-[#41444C]" : "bg-[#FF5F1F] text-white shadow-lg hover:scale-105"}`}>
+                    <Send size={18} />
+                 </button>
               </form>
            </div>
         </div>
