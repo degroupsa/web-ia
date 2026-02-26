@@ -105,7 +105,7 @@ const CodeBlockRenderer = ({ inline, className, children, onCopy, ...props }: an
 };
 
 // ==========================================
-// 🔥 OPTIMIZACIÓN DE RENDIMIENTO: MEMOIZACIÓN DEL MENSAJE 🔥
+// 🔥 OPTIMIZACIÓN DE RENDIMIENTO: MEMOIZACIÓN BLINDADA 🔥
 // ==========================================
 const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: string) => void }) => {
   let displayContent = msg.content;
@@ -136,6 +136,10 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
        {msg.role === "user" && <div className="w-9 h-9 rounded-lg bg-[#262730] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm"><User size={18} className="text-[#9799A5]" /></div>}
     </div>
   );
+}, (prevProps, nextProps) => {
+  // 🛡️ EL ESCUDO DEFINITIVO: Solo redibujar si el texto del mensaje realmente cambió.
+  // ¡Ignora absolutamente cualquier pulsación de tecla!
+  return prevProps.msg.content === nextProps.msg.content;
 });
 
 // ==========================================
