@@ -118,7 +118,8 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
        {msg.role === "assistant" && <div className="w-9 h-9 rounded-lg bg-[#1C1E24] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm overflow-hidden"><img src="/icon.png" className="w-6 h-6 object-contain" onError={(e) => e.currentTarget.style.display='none'} /></div>}
        <div className={`max-w-[85%] px-6 py-4 rounded-2xl shadow-md ${msg.role === "user" ? "bg-[#262730] border border-[#41444C] text-[#FAFAFA] rounded-tr-sm" : "bg-transparent text-[#FAFAFA] w-full"}`}>
          {msg.role === "assistant" ? (
-           <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+           // 🔥 ACÁ ESTÁ EL CAMBIO DE LECTURA (text-[15px] y leading-8 para más interlineado) 🔥
+           <div className="markdown-body prose prose-invert max-w-none text-[15px] leading-8">
              <ReactMarkdown
                components={{
                  code(props: any) {
@@ -130,15 +131,14 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
              </ReactMarkdown>
            </div>
          ) : (
-           <p className="text-sm">{displayContent}</p>
+           // 🔥 EL MENSAJE DEL USUARIO TAMBIÉN MÁS GRANDE 🔥
+           <p className="text-[15px] leading-relaxed m-0">{displayContent}</p>
          )}
        </div>
        {msg.role === "user" && <div className="w-9 h-9 rounded-lg bg-[#262730] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm"><User size={18} className="text-[#9799A5]" /></div>}
     </div>
   );
 }, (prevProps, nextProps) => {
-  // 🛡️ EL ESCUDO DEFINITIVO: Solo redibujar si el texto del mensaje realmente cambió.
-  // ¡Ignora absolutamente cualquier pulsación de tecla!
   return prevProps.msg.content === nextProps.msg.content;
 });
 
@@ -175,12 +175,14 @@ export default function KortexaPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null); 
   const toggleMenuRef = useRef<HTMLButtonElement>(null); 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
+  // 🔥 REFERENCIA PARA LA CAJA DE TEXTO 🔥
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const [confirmModal, setConfirmModal] = useState({ 
     isOpen: false, title: "", message: "", action: () => {}, isDanger: false 
   });
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // RECUPERAR SESIÓN
   useEffect(() => {
@@ -218,6 +220,13 @@ export default function KortexaPage() {
 
   useEffect(() => { if (authData) fetchHistory(authData.email); }, [authData]);
   useEffect(() => { if (authData) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading, authData]);
+
+  // 🔥 RESTAURAR TAMAÑO DE LA CAJA DE TEXTO AL VACIARLA 🔥
+  useEffect(() => {
+    if (inputValue === "" && textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+    }
+  }, [inputValue]);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -762,7 +771,7 @@ export default function KortexaPage() {
                 </div>
               )}
 
-              {/* 🔥 FORMULARIO MEJORADO (Textarea inteligente) 🔥 */}
+              {/* 🔥 FORMULARIO CON REFERENCIA AGREGADA 🔥 */}
               <form onSubmit={handleSendMessage} className="relative flex items-end bg-[#262730] border border-[#41444C] rounded-2xl shadow-2xl focus-within:border-[#FF5F1F] transition-all pb-1 pt-1">
                  <button ref={toggleMenuRef} onClick={() => setShowInputMenu(!showInputMenu)} type="button" className="pl-4 pr-1 mb-2.5 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer">
                    <MoreVertical size={20} />
@@ -773,10 +782,11 @@ export default function KortexaPage() {
                  </button>
                  
                  <textarea 
+                   ref={textareaRef}
                    value={inputValue} 
                    onChange={(e) => setInputValue(e.target.value)} 
                    placeholder="Escribe tu mensaje a Kortexa..." 
-                   className="w-full bg-transparent border-none text-white px-2 py-3 focus:ring-0 placeholder-[#9799A5] outline-none resize-none min-h-[44px] max-h-32 scrollbar-thin pr-14" 
+                   className="w-full bg-transparent border-none text-white px-2 py-3 focus:ring-0 placeholder-[#9799A5] outline-none resize-none min-h-[44px] max-h-32 scrollbar-thin pr-14 text-[15px]" 
                    rows={1}
                    onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
