@@ -118,7 +118,6 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
        {msg.role === "assistant" && <div className="w-9 h-9 rounded-lg bg-[#1C1E24] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm overflow-hidden"><img src="/icon.png" className="w-6 h-6 object-contain" onError={(e) => e.currentTarget.style.display='none'} /></div>}
        <div className={`max-w-[85%] px-6 py-4 rounded-2xl shadow-md ${msg.role === "user" ? "bg-[#262730] border border-[#41444C] text-[#FAFAFA] rounded-tr-sm" : "bg-transparent text-[#FAFAFA] w-full"}`}>
          {msg.role === "assistant" ? (
-           // 🔥 ACÁ ESTÁ EL CAMBIO DE LECTURA (text-[15px] y leading-8 para más interlineado) 🔥
            <div className="markdown-body prose prose-invert max-w-none text-[15px] leading-8">
              <ReactMarkdown
                components={{
@@ -131,7 +130,6 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
              </ReactMarkdown>
            </div>
          ) : (
-           // 🔥 EL MENSAJE DEL USUARIO TAMBIÉN MÁS GRANDE 🔥
            <p className="text-[15px] leading-relaxed m-0">{displayContent}</p>
          )}
        </div>
@@ -176,8 +174,6 @@ export default function KortexaPage() {
   const menuRef = useRef<HTMLDivElement>(null); 
   const toggleMenuRef = useRef<HTMLButtonElement>(null); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // 🔥 REFERENCIA PARA LA CAJA DE TEXTO 🔥
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [confirmModal, setConfirmModal] = useState({ 
@@ -221,7 +217,7 @@ export default function KortexaPage() {
   useEffect(() => { if (authData) fetchHistory(authData.email); }, [authData]);
   useEffect(() => { if (authData) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading, authData]);
 
-  // 🔥 RESTAURAR TAMAÑO DE LA CAJA DE TEXTO AL VACIARLA 🔥
+  // RESTAURAR TAMAÑO DE LA CAJA DE TEXTO AL VACIARLA
   useEffect(() => {
     if (inputValue === "" && textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -255,6 +251,7 @@ export default function KortexaPage() {
       setChatHistory([]); 
       setActiveChatId(null); 
       setAttachedFile(null); 
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Limpiar input al salir
   };
 
   const determineLoadingState = (text: string) => {
@@ -400,7 +397,13 @@ export default function KortexaPage() {
     setToastMessage(`✅ Archivo .${extension} descargado correctamente`);
   };
 
-  const handleClearScreen = () => { setMessages([]); setActiveChatId(null); setShowInputMenu(false); setAttachedFile(null); };
+  const handleClearScreen = () => { 
+      setMessages([]); 
+      setActiveChatId(null); 
+      setShowInputMenu(false); 
+      setAttachedFile(null); 
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Limpiar input
+  };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault(); 
@@ -435,7 +438,9 @@ export default function KortexaPage() {
     setIsLoading(true);
 
     try {
+      // 🔥 SOLUCIÓN BUG: Reseteamos el archivo visualmente y en el input HTML 🔥
       setAttachedFile(null); 
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
       const response = await fetch("https://kortexa-backend.onrender.com/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -542,7 +547,7 @@ export default function KortexaPage() {
           </div>
 
           <div className="px-4 pb-4 border-b border-[#41444C]/30 text-left">
-             <button onClick={() => {setMessages([]); setActiveChatId(null); setInputValue(""); setAttachedFile(null); setSuggestionAlert(null);}} className="w-full py-2.5 px-4 rounded-md border border-[#41444C] text-[#FAFAFA] bg-[#262730] hover:bg-[#1C1E24] hover:text-[#FF5F1F] hover:border-[#FF5F1F] transition-all flex items-center justify-center gap-2 text-sm font-medium cursor-pointer"><Plus size={16} /> Nuevo Chat</button>
+             <button onClick={() => {setMessages([]); setActiveChatId(null); setInputValue(""); setAttachedFile(null); setSuggestionAlert(null); if (fileInputRef.current) fileInputRef.current.value = "";}} className="w-full py-2.5 px-4 rounded-md border border-[#41444C] text-[#FAFAFA] bg-[#262730] hover:bg-[#1C1E24] hover:text-[#FF5F1F] hover:border-[#FF5F1F] transition-all flex items-center justify-center gap-2 text-sm font-medium cursor-pointer"><Plus size={16} /> Nuevo Chat</button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 scrollbar-thin text-left">
@@ -716,8 +721,6 @@ export default function KortexaPage() {
              </div>
            ) : (
              <div className="max-w-3xl mx-auto space-y-8 pt-4">
-               
-               {/* 🔥 MAPEO OPTIMIZADO: Usamos la cápsula MemoizedMessage 🔥 */}
                {messages.map((msg, i) => (
                  <MessageBubble key={i} msg={msg} onCopy={(m: string) => setToastMessage(m)} />
                ))}
@@ -761,17 +764,20 @@ export default function KortexaPage() {
                 </div>
               )}
 
+              {/* 🔥 CARTELITO DEL ARCHIVO ADJUNTO (Con el bug del botón arreglado) 🔥 */}
               {attachedFile && (
                 <div className="absolute -top-10 left-4 bg-[#262730] border border-[#FF5F1F]/50 text-[#DDD] text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-lg animate-in slide-in-from-bottom-2">
                     <Paperclip size={12} className="text-[#FF5F1F]" />
                     <span className="max-w-[200px] truncate font-medium">{attachedFile.name}</span>
-                    <button type="button" onClick={() => setAttachedFile(null)} className="ml-2 text-[#9799A5] hover:text-white bg-transparent border-none cursor-pointer p-0.5 rounded-full hover:bg-[#41444C]">
+                    <button type="button" onClick={() => { 
+                        setAttachedFile(null); 
+                        if (fileInputRef.current) fileInputRef.current.value = ""; 
+                    }} className="ml-2 text-[#9799A5] hover:text-white bg-transparent border-none cursor-pointer p-0.5 rounded-full hover:bg-[#41444C]">
                         <X size={12} />
                     </button>
                 </div>
               )}
 
-              {/* 🔥 FORMULARIO CON REFERENCIA AGREGADA 🔥 */}
               <form onSubmit={handleSendMessage} className="relative flex items-end bg-[#262730] border border-[#41444C] rounded-2xl shadow-2xl focus-within:border-[#FF5F1F] transition-all pb-1 pt-1">
                  <button ref={toggleMenuRef} onClick={() => setShowInputMenu(!showInputMenu)} type="button" className="pl-4 pr-1 mb-2.5 text-[#9799A5] hover:text-white transition-colors bg-transparent border-none cursor-pointer">
                    <MoreVertical size={20} />
@@ -781,6 +787,7 @@ export default function KortexaPage() {
                    <Paperclip size={18} />
                  </button>
                  
+                 {/* 🔥 ACA LE AGREGAMOS EL ONPASTE A LA CAJA DE TEXTO 🔥 */}
                  <textarea 
                    ref={textareaRef}
                    value={inputValue} 
@@ -797,6 +804,15 @@ export default function KortexaPage() {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleSendMessage();
+                      }
+                   }}
+                   onPaste={(e) => {
+                      if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+                         const file = e.clipboardData.files[0];
+                         setAttachedFile(file);
+                         if (file.type.startsWith('image/')) {
+                            e.preventDefault();
+                         }
                       }
                    }}
                  />
