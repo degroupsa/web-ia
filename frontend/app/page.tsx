@@ -293,7 +293,7 @@ export default function KortexaPage() {
     });
   };
 
-  // 🔥 RESTAURAR ROL ESPECÍFICO DEL CHAT AL ABRIRLO 🔥
+// 🔥 RESTAURAR ROL ESPECÍFICO DEL CHAT AL ABRIRLO (CORREGIDO) 🔥
   const handleSelectChat = async (id: string) => {
     setActiveChatId(id); setIsLoading(true);
     try {
@@ -302,10 +302,12 @@ export default function KortexaPage() {
         const data = await res.json();
         setMessages(data.map((m: any) => ({ role: m.role === "model" ? "assistant" : m.role, content: m.content })));
         
-        // Buscar si este chat específico tenía un rol guardado
+        // 👉 EL ARREGLO ESTÁ ACÁ: Lógica estricta de cambio de rol
         const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
         if (savedRoles[id]) {
-            setCurrentRole(savedRoles[id]);
+            setCurrentRole(savedRoles[id]); // Si tiene rol guardado, lo pone.
+        } else {
+            setCurrentRole("Asistente General (Multimodal)"); // Si es un chat sin rol, lo resetea para no mezclar.
         }
       }
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
