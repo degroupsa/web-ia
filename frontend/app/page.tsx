@@ -9,13 +9,12 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-// 🔥 LIBRERÍA DE DISEÑO DE CÓDIGO (Ignoramos los warnings de TypeScript) 🔥
+// 🔥 LIBRERÍA DE DISEÑO DE CÓDIGO 🔥
 // @ts-ignore
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 // @ts-ignore
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-// Importamos componentes
 import PricingModal from "../components/PricingModal";
 import LoginScreen from "../components/LoginScreen";
 import ConfirmationModal from "../components/ConfirmationModal";
@@ -41,7 +40,6 @@ const CodeBlockRenderer = ({ inline, className, children, onCopy, ...props }: an
               {match[1]}
             </span>
             
-            {/* Si es HTML, mostramos el switch de Vista Previa */}
             {isHtml && (
               <div className="flex bg-[#0E1117] rounded-md p-0.5 border border-[#41444C]">
                 <button
@@ -72,7 +70,6 @@ const CodeBlockRenderer = ({ inline, className, children, onCopy, ...props }: an
           </button>
         </div>
         
-        {/* Renderizado Condicional: Código vs Web en Vivo */}
         {viewMode === 'preview' && isHtml ? (
            <div className="bg-white w-full h-[500px] overflow-hidden">
              <iframe 
@@ -130,7 +127,7 @@ const MessageBubble = React.memo(({ msg, onCopy }: { msg: Message, onCopy: (m: s
              </ReactMarkdown>
            </div>
          ) : (
-           <p className="text-[15px] leading-relaxed m-0">{displayContent}</p>
+           <p className="text-[15px] leading-relaxed m-0 whitespace-pre-wrap font-mono">{displayContent}</p>
          )}
        </div>
        {msg.role === "user" && <div className="w-9 h-9 rounded-lg bg-[#262730] border border-[#41444C] flex items-center justify-center shrink-0 mt-1 shadow-sm"><User size={18} className="text-[#9799A5]" /></div>}
@@ -182,23 +179,21 @@ export default function KortexaPage() {
 
   // RECUPERAR SESIÓN
   useEffect(() => {
-    const savedSession = sessionStorage.getItem("kortexa_session");
+    const savedSession = localStorage.getItem("kortexa_session");
     if (savedSession) {
       try { setAuthData(JSON.parse(savedSession)); } catch (e) {}
     }
+    
+    // Cargar rol por defecto general al iniciar
+    const defaultRole = localStorage.getItem("kortexa_default_role");
+    if (defaultRole) setCurrentRole(defaultRole);
+
     setIsCheckingSession(false);
   }, []);
 
-  // CERRAR MENÚ AL CLIC AFUERA
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        showInputMenu && 
-        menuRef.current && 
-        !menuRef.current.contains(event.target as Node) &&
-        toggleMenuRef.current && 
-        !toggleMenuRef.current.contains(event.target as Node)
-      ) {
+      if (showInputMenu && menuRef.current && !menuRef.current.contains(event.target as Node) && toggleMenuRef.current && !toggleMenuRef.current.contains(event.target as Node)) {
         setShowInputMenu(false);
       }
     }
@@ -206,7 +201,6 @@ export default function KortexaPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showInputMenu]);
 
-  // OCULTAR TOAST
   useEffect(() => {
     if (toastMessage) {
       const timer = setTimeout(() => setToastMessage(null), 3000);
@@ -217,7 +211,6 @@ export default function KortexaPage() {
   useEffect(() => { if (authData) fetchHistory(authData.email); }, [authData]);
   useEffect(() => { if (authData) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading, authData]);
 
-  // RESTAURAR TAMAÑO DE LA CAJA DE TEXTO AL VACIARLA
   useEffect(() => {
     if (inputValue === "" && textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -246,12 +239,12 @@ export default function KortexaPage() {
 
   const handleLogout = () => { 
       setAuthData(null); 
-      sessionStorage.removeItem("kortexa_session");
+      localStorage.removeItem("kortexa_session");
       setMessages([]); 
       setChatHistory([]); 
       setActiveChatId(null); 
       setAttachedFile(null); 
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Limpiar input al salir
+      if (fileInputRef.current) fileInputRef.current.value = ""; 
   };
 
   const determineLoadingState = (text: string) => {
@@ -294,15 +287,13 @@ export default function KortexaPage() {
                     setActiveChatId(null); 
                 } 
                 else { throw new Error("Error Interno"); }
-            } catch (e) { 
-                alert("No se pudo eliminar el historial."); 
-            } finally {
-                setIsDeletingChats(false);
-            }
+            } catch (e) { alert("No se pudo eliminar el historial."); } 
+            finally { setIsDeletingChats(false); }
         }
     });
   };
 
+  // 🔥 RESTAURAR ROL ESPECÍFICO DEL CHAT AL ABRIRLO 🔥
   const handleSelectChat = async (id: string) => {
     setActiveChatId(id); setIsLoading(true);
     try {
@@ -310,10 +301,17 @@ export default function KortexaPage() {
       if (res.ok) {
         const data = await res.json();
         setMessages(data.map((m: any) => ({ role: m.role === "model" ? "assistant" : m.role, content: m.content })));
+        
+        // Buscar si este chat específico tenía un rol guardado
+        const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
+        if (savedRoles[id]) {
+            setCurrentRole(savedRoles[id]);
+        }
       }
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
+  // 🔥 GUARDAR ROL EN EL DICCIONARIO DEL CHAT 🔥
   const handleRoleChange = (newRole: string) => {
     setSuggestionAlert(null);
     if (newRole.includes("Abogado") || newRole.includes("Legal")) {
@@ -324,6 +322,13 @@ export default function KortexaPage() {
         setShowSecurityAlert({role: newRole, type: 'security'});
     } else {
         setCurrentRole(newRole);
+        localStorage.setItem("kortexa_default_role", newRole); // Guardar como general
+        
+        if (activeChatId) { // Si hay un chat abierto, anclarlo a este chat
+            const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
+            savedRoles[activeChatId] = newRole;
+            localStorage.setItem("kortexa_chat_roles", JSON.stringify(savedRoles));
+        }
     }
   };
 
@@ -402,7 +407,11 @@ export default function KortexaPage() {
       setActiveChatId(null); 
       setShowInputMenu(false); 
       setAttachedFile(null); 
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Limpiar input
+      if (fileInputRef.current) fileInputRef.current.value = ""; 
+      
+      // Volver al rol por defecto al iniciar un chat en blanco
+      const defaultRole = localStorage.getItem("kortexa_default_role") || "Asistente General (Multimodal)";
+      setCurrentRole(defaultRole);
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -438,7 +447,6 @@ export default function KortexaPage() {
     setIsLoading(true);
 
     try {
-      // 🔥 SOLUCIÓN BUG: Reseteamos el archivo visualmente y en el input HTML 🔥
       setAttachedFile(null); 
       if (fileInputRef.current) fileInputRef.current.value = "";
 
@@ -457,7 +465,16 @@ export default function KortexaPage() {
       });
       const data = await response.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
-      if (data.chat_id && data.chat_id !== activeChatId) { setActiveChatId(data.chat_id); fetchHistory(authData!.email); }
+      
+      // 🔥 SI SE CREÓ UN CHAT NUEVO, ANCLAMOS EL ROL ACTUAL A ESE CHAT 🔥
+      if (data.chat_id && data.chat_id !== activeChatId) { 
+          setActiveChatId(data.chat_id); 
+          fetchHistory(authData!.email); 
+          
+          const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
+          savedRoles[data.chat_id] = currentRole;
+          localStorage.setItem("kortexa_chat_roles", JSON.stringify(savedRoles));
+      }
     } catch (e) { setMessages(prev => [...prev, { role: "assistant", content: "⚠️ Error de conexión." }]); } 
     finally { setIsLoading(false); }
   };
@@ -472,7 +489,7 @@ export default function KortexaPage() {
 
   if (!authData) return <LoginScreen onLoginSuccess={(e, p) => {
       setAuthData({email:e, plan:p});
-      sessionStorage.setItem("kortexa_session", JSON.stringify({email:e, plan:p}));
+      localStorage.setItem("kortexa_session", JSON.stringify({email:e, plan:p}));
   }} />;
 
   return (
@@ -480,7 +497,6 @@ export default function KortexaPage() {
       <PricingModal isOpen={showPricing} onClose={() => setShowPricing(false)} userEmail={authData.email} />
       <ConfirmationModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal(prev => ({...prev, isOpen: false}))} onConfirm={confirmModal.action} title={confirmModal.title} message={confirmModal.message} isDanger={confirmModal.isDanger} />
 
-      {/* 🔥 ALERTA FLOTANTE (TOAST) MEJORADA 🔥 */}
       {toastMessage && (
           <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4 duration-300">
               <div className="bg-[#1C1E24] border border-[#FF5F1F]/50 shadow-[0_0_20px_rgba(255,95,31,0.2)] rounded-xl p-4 flex items-center gap-3">
@@ -504,7 +520,16 @@ export default function KortexaPage() {
                   </p>
                   <div className="flex flex-col gap-3">
                       <button 
-                          onClick={() => { setCurrentRole(showSecurityAlert.role); setShowSecurityAlert(null); }}
+                          onClick={() => { 
+                              setCurrentRole(showSecurityAlert.role); 
+                              setShowSecurityAlert(null); 
+                              localStorage.setItem("kortexa_default_role", showSecurityAlert.role);
+                              if (activeChatId) {
+                                  const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
+                                  savedRoles[activeChatId] = showSecurityAlert.role;
+                                  localStorage.setItem("kortexa_chat_roles", JSON.stringify(savedRoles));
+                              }
+                          }}
                           className="w-full py-4 bg-red-500 hover:bg-red-600 border-none cursor-pointer text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg"
                       >
                           Aceptar Responsabilidad
@@ -547,7 +572,7 @@ export default function KortexaPage() {
           </div>
 
           <div className="px-4 pb-4 border-b border-[#41444C]/30 text-left">
-             <button onClick={() => {setMessages([]); setActiveChatId(null); setInputValue(""); setAttachedFile(null); setSuggestionAlert(null); if (fileInputRef.current) fileInputRef.current.value = "";}} className="w-full py-2.5 px-4 rounded-md border border-[#41444C] text-[#FAFAFA] bg-[#262730] hover:bg-[#1C1E24] hover:text-[#FF5F1F] hover:border-[#FF5F1F] transition-all flex items-center justify-center gap-2 text-sm font-medium cursor-pointer"><Plus size={16} /> Nuevo Chat</button>
+             <button onClick={handleClearScreen} className="w-full py-2.5 px-4 rounded-md border border-[#41444C] text-[#FAFAFA] bg-[#262730] hover:bg-[#1C1E24] hover:text-[#FF5F1F] hover:border-[#FF5F1F] transition-all flex items-center justify-center gap-2 text-sm font-medium cursor-pointer"><Plus size={16} /> Nuevo Chat</button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 scrollbar-thin text-left">
@@ -764,7 +789,6 @@ export default function KortexaPage() {
                 </div>
               )}
 
-              {/* 🔥 CARTELITO DEL ARCHIVO ADJUNTO (Con el bug del botón arreglado) 🔥 */}
               {attachedFile && (
                 <div className="absolute -top-10 left-4 bg-[#262730] border border-[#FF5F1F]/50 text-[#DDD] text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-lg animate-in slide-in-from-bottom-2">
                     <Paperclip size={12} className="text-[#FF5F1F]" />
@@ -787,13 +811,12 @@ export default function KortexaPage() {
                    <Paperclip size={18} />
                  </button>
                  
-                 {/* 🔥 ACA LE AGREGAMOS EL ONPASTE A LA CAJA DE TEXTO 🔥 */}
                  <textarea 
                    ref={textareaRef}
                    value={inputValue} 
                    onChange={(e) => setInputValue(e.target.value)} 
                    placeholder="Escribe tu mensaje a Kortexa..." 
-                   className="w-full bg-transparent border-none text-white px-2 py-3 focus:ring-0 placeholder-[#9799A5] outline-none resize-none min-h-[44px] max-h-32 scrollbar-thin pr-14 text-[15px]" 
+                   className="w-full bg-transparent border-none text-white px-2 py-3 focus:ring-0 placeholder-[#9799A5] outline-none resize-none min-h-[44px] max-h-96 scrollbar-thin pr-14 text-[15px]" 
                    rows={1}
                    onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
@@ -803,7 +826,7 @@ export default function KortexaPage() {
                    onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        handleSendMessage();
+                        e.currentTarget.form?.requestSubmit(); 
                       }
                    }}
                    onPaste={(e) => {
