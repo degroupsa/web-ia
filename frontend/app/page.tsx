@@ -252,7 +252,7 @@ export default function KortexaPage() {
     if (lower.includes("imag") || lower.includes("dibuj")) return "DISEÑANDO EN KORTEXA STUDIO...";
     if (lower.includes("analiz") || lower.includes("dato") || lower.includes("excel")) return "ANALIZANDO CONJUNTO DE DATOS...";
     if (lower.includes("busc") || lower.includes("web")) return "NAVEGANDO EN LA RED GLOBAL...";
-    return "CARGANDO RESPUESTA DEL NÚCLEO...";
+    return "KORTEXA ESTÁ TRABAJANDO..";
   };
 
   const triggerDeleteSingle = (chatId: string) => {
