@@ -177,14 +177,13 @@ export default function KortexaPage() {
     isOpen: false, title: "", message: "", action: () => {}, isDanger: false 
   });
 
-  // RECUPERAR SESIÓN
+  // RECUPERAR SESIÓN Y ROL
   useEffect(() => {
     const savedSession = localStorage.getItem("kortexa_session");
     if (savedSession) {
       try { setAuthData(JSON.parse(savedSession)); } catch (e) {}
     }
     
-    // Cargar rol por defecto general al iniciar
     const defaultRole = localStorage.getItem("kortexa_default_role");
     if (defaultRole) setCurrentRole(defaultRole);
 
@@ -293,7 +292,6 @@ export default function KortexaPage() {
     });
   };
 
-// 🔥 RESTAURAR ROL ESPECÍFICO DEL CHAT AL ABRIRLO (CORREGIDO) 🔥
   const handleSelectChat = async (id: string) => {
     setActiveChatId(id); setIsLoading(true);
     try {
@@ -302,18 +300,16 @@ export default function KortexaPage() {
         const data = await res.json();
         setMessages(data.map((m: any) => ({ role: m.role === "model" ? "assistant" : m.role, content: m.content })));
         
-        // 👉 EL ARREGLO ESTÁ ACÁ: Lógica estricta de cambio de rol
         const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
         if (savedRoles[id]) {
-            setCurrentRole(savedRoles[id]); // Si tiene rol guardado, lo pone.
+            setCurrentRole(savedRoles[id]);
         } else {
-            setCurrentRole("Asistente General (Multimodal)"); // Si es un chat sin rol, lo resetea para no mezclar.
+            setCurrentRole("Asistente General (Multimodal)");
         }
       }
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
-  // 🔥 GUARDAR ROL EN EL DICCIONARIO DEL CHAT 🔥
   const handleRoleChange = (newRole: string) => {
     setSuggestionAlert(null);
     if (newRole.includes("Abogado") || newRole.includes("Legal")) {
@@ -324,9 +320,9 @@ export default function KortexaPage() {
         setShowSecurityAlert({role: newRole, type: 'security'});
     } else {
         setCurrentRole(newRole);
-        localStorage.setItem("kortexa_default_role", newRole); // Guardar como general
+        localStorage.setItem("kortexa_default_role", newRole); 
         
-        if (activeChatId) { // Si hay un chat abierto, anclarlo a este chat
+        if (activeChatId) { 
             const savedRoles = JSON.parse(localStorage.getItem("kortexa_chat_roles") || "{}");
             savedRoles[activeChatId] = newRole;
             localStorage.setItem("kortexa_chat_roles", JSON.stringify(savedRoles));
@@ -411,7 +407,6 @@ export default function KortexaPage() {
       setAttachedFile(null); 
       if (fileInputRef.current) fileInputRef.current.value = ""; 
       
-      // Volver al rol por defecto al iniciar un chat en blanco
       const defaultRole = localStorage.getItem("kortexa_default_role") || "Asistente General (Multimodal)";
       setCurrentRole(defaultRole);
   };
@@ -468,7 +463,6 @@ export default function KortexaPage() {
       const data = await response.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
       
-      // 🔥 SI SE CREÓ UN CHAT NUEVO, ANCLAMOS EL ROL ACTUAL A ESE CHAT 🔥
       if (data.chat_id && data.chat_id !== activeChatId) { 
           setActiveChatId(data.chat_id); 
           fetchHistory(authData!.email); 

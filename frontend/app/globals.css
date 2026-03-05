@@ -1,3 +1,6 @@
+/* 🔥 Importamos la fuente estilo Gemini 🔥 */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -81,4 +84,21 @@ body {
 .glass-modal {
   background: rgba(14, 17, 23, 0.85);
   backdrop-filter: blur(12px);
+}
+
+/* ==========================================
+   🔥 CLASES EXCLUSIVAS PARA LA LECTURA DEL CHAT 🔥
+   ========================================== */
+.estilo-gemini {
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif !important;
+}
+
+.estilo-gemini * {
+  font-family: inherit !important;
+}
+
+.estilo-gemini pre, 
+.estilo-gemini code, 
+.estilo-gemini pre * {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
 }
